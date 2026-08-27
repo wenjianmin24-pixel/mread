@@ -14,8 +14,9 @@ import {
   Palette,
   MousePointerClick,
   Info,
+  LibraryBig,
 } from "lucide-react";
-import { DEFAULT_SETTINGS } from "@/lib/types";
+import { DEFAULT_SETTINGS, type ReaderSettings } from "@/lib/types";
 
 interface FontMeta {
   id: number;
@@ -30,6 +31,33 @@ export default function SettingsPage({ initialFonts }: { initialFonts: FontMeta[
   const [fontList, setFontList] = useState(initialFonts);
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState("");
+
+  // 书架设置（封面字号）
+  const [shelfSettings, setShelfSettings] = useState<ReaderSettings>(DEFAULT_SETTINGS);
+  const [shelfLoaded, setShelfLoaded] = useState(false);
+  const saveShelfTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.settings) setShelfSettings(d.settings);
+      })
+      .finally(() => setShelfLoaded(true));
+  }, []);
+
+  function setCoverTitleSize(v: number) {
+    const next = { ...shelfSettings, coverTitleSize: v };
+    setShelfSettings(next);
+    if (saveShelfTimer.current) clearTimeout(saveShelfTimer.current);
+    saveShelfTimer.current = setTimeout(() => {
+      fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(next),
+      }).catch(() => {});
+    }, 500);
+  }
 
   const showToast = (m: string) => {
     setToast(m);
@@ -160,6 +188,67 @@ export default function SettingsPage({ initialFonts }: { initialFonts: FontMeta[
         </div>
       </section>
 
+      {/* 书架设置 */}
+      <section className="anim-fade-up mt-10" style={{ animationDelay: "0.05s" }}>
+        <h2 className="flex items-center gap-2 text-sm font-semibold tracking-wide text-zinc-300">
+          <LibraryBig size={15} className="text-amber-400" />
+          书架设置
+        </h2>
+        <div className="mt-3 flex items-center gap-5 rounded-2xl border border-white/8 bg-white/[0.04] p-4">
+          {/* 预览封面 */}
+          <div className="w-20 shrink-0">
+            <div
+              className="flex aspect-[3/4] w-full flex-col justify-between overflow-hidden rounded-xl p-2.5 shadow-lg"
+              style={{
+                background:
+                  "linear-gradient(160deg, hsl(216 32% 30%) 0%, hsl(216 40% 16%) 60%, hsl(240 42% 11%) 100%)",
+              }}
+            >
+              <span className="self-start rounded bg-white/12 px-1 py-0.5 text-[8px] tracking-wider text-white/80">
+                MD
+              </span>
+              <div>
+                <p
+                  className="font-serif font-bold leading-snug text-white/95"
+                  style={{
+                    fontSize: shelfSettings.coverTitleSize,
+                    display: "-webkit-box",
+                    WebkitLineClamp: shelfSettings.coverTitleSize >= 18 ? 2 : 3,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                  }}
+                >
+                  夜航星与漂流的书信
+                </p>
+                <div className="mt-1.5 h-[3px] w-full overflow-hidden rounded-full bg-white/15">
+                  <div className="h-full w-[42%] rounded-full bg-gradient-to-r from-amber-300 to-amber-500" />
+                </div>
+              </div>
+            </div>
+          </div>
+          {/* 滑块 */}
+          <div className="min-w-0 flex-1">
+            <div className="mb-2 flex items-center justify-between text-xs">
+              <span className="text-zinc-400">封面书名字号</span>
+              <span className="tabular-nums text-zinc-500">{shelfSettings.coverTitleSize}px</span>
+            </div>
+            <input
+              type="range"
+              min={11}
+              max={22}
+              step={1}
+              value={shelfSettings.coverTitleSize}
+              onChange={(e) => setCoverTitleSize(Number(e.target.value))}
+              className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-white/15 accent-amber-400"
+              disabled={!shelfLoaded}
+            />
+            <p className="mt-2 text-[10px] leading-relaxed text-zinc-600">
+              调整书架上封面书名的显示大小，大字号自动减少行数。保存后返回书架生效。
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* 阅读偏好说明 */}
       <section className="anim-fade-up mt-10" style={{ animationDelay: "0.1s" }}>
         <h2 className="flex items-center gap-2 text-sm font-semibold tracking-wide text-zinc-300">
@@ -170,7 +259,7 @@ export default function SettingsPage({ initialFonts }: { initialFonts: FontMeta[
           {[
             { icon: Type, t: "字体字号", d: "4 款内置字族 + 自定义导入字体" },
             { icon: Quote, t: "对话着色", d: "自动识别引号对白，支持多彩轮换" },
-            { icon: Palette, t: "主题配色", d: "8 款预设主题 + 自定义背景/文字色" },
+            { icon: Palette, t: "主题配色", d: "20 款预设主题 + 自定义背景/文字色" },
             { icon: MousePointerClick, t: "翻页方式", d: "沉浸滚动 / 横向仿真分页" },
           ].map((c) => (
             <div key={c.t} className="rounded-2xl border border-white/8 bg-white/[0.04] p-3.5">

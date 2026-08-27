@@ -18,6 +18,7 @@ export interface ReaderSettings {
   brightness: number; // 0.3 ~ 1
   keepAwake: boolean; // 屏幕常亮
   showFooter: boolean; // 底部进度显示
+  coverTitleSize: number; // 书架封面书名字号 px
 }
 
 export const DEFAULT_SETTINGS: ReaderSettings = {
@@ -39,6 +40,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   brightness: 1,
   keepAwake: false,
   showFooter: true,
+  coverTitleSize: 15,
 };
 
 export interface ThemePreset {
@@ -48,18 +50,34 @@ export interface ThemePreset {
   fg: string;
   sub: string; // 次要文字
   ui: string; // 工具栏背景
+  dark: boolean; // 暗色主题（面板分组用）
 }
 
 export const THEME_PRESETS: ThemePreset[] = [
-  { id: "paper", name: "纸白", bg: "#f6f3ec", fg: "#2e2b26", sub: "#8a8478", ui: "#efeade" },
-  { id: "sepia", name: "羊皮纸", bg: "#f1e5cb", fg: "#4b3b27", sub: "#97825f", ui: "#e9dab8" },
-  { id: "bamboo", name: "竹青", bg: "#e2ecda", fg: "#2f3d2a", sub: "#76896c", ui: "#d6e4c9" },
-  { id: "mist", name: "雾蓝", bg: "#e6ebf1", fg: "#2a3442", sub: "#71809a", ui: "#dbe3ec" },
-  { id: "rose", name: "樱粉", bg: "#f3e6e4", fg: "#432f2e", sub: "#a08381", ui: "#eedbd7" },
-  { id: "night", name: "暗夜", bg: "#17191d", fg: "#b6bac2", sub: "#5f646d", ui: "#1f2227" },
-  { id: "ink", name: "墨黑", bg: "#000000", fg: "#8f939a", sub: "#4a4e55", ui: "#101112" },
-  { id: "boxmocha", name: "双色盒子", bg: "#252637", fg: "#cdd6f4", sub: "#9399b2", ui: "#1e1e2e" },
-  { id: "custom", name: "自定义", bg: "#e8dcc3", fg: "#3a2f22", sub: "#8a7a63", ui: "#e2d4b6" },
+  // ===== 亮色 =====
+  { id: "paper", name: "纸白", bg: "#f6f3ec", fg: "#2e2b26", sub: "#8a8478", ui: "#efeade", dark: false },
+  { id: "sepia", name: "羊皮纸", bg: "#f1e5cb", fg: "#4b3b27", sub: "#97825f", ui: "#e9dab8", dark: false },
+  { id: "bamboo", name: "竹青", bg: "#e2ecda", fg: "#2f3d2a", sub: "#76896c", ui: "#d6e4c9", dark: false },
+  { id: "mist", name: "雾蓝", bg: "#e6ebf1", fg: "#2a3442", sub: "#71809a", ui: "#dbe3ec", dark: false },
+  { id: "rose", name: "樱粉", bg: "#f3e6e4", fg: "#432f2e", sub: "#a08381", ui: "#eedbd7", dark: false },
+  { id: "celadon", name: "青瓷", bg: "#e8f0ea", fg: "#2b4036", sub: "#7f9c8d", ui: "#dcebe1", dark: false },
+  { id: "sky", name: "晴空", bg: "#eaf3fa", fg: "#2c3e54", sub: "#83a0b8", ui: "#ddeaf4", dark: false },
+  { id: "almond", name: "杏仁", bg: "#f7ecdc", fg: "#453527", sub: "#ab9174", ui: "#f0e1ca", dark: false },
+  { id: "lavender", name: "薰衣草", bg: "#efebf7", fg: "#372f4c", sub: "#8e84ab", ui: "#e5dff1", dark: false },
+  { id: "mint", name: "薄荷", bg: "#e2f2ec", fg: "#1f453c", sub: "#72a497", ui: "#d4eae1", dark: false },
+  // ===== 暗色 =====
+  { id: "night", name: "暗夜", bg: "#17191d", fg: "#b6bac2", sub: "#5f646d", ui: "#1f2227", dark: true },
+  { id: "ink", name: "墨黑", bg: "#000000", fg: "#8f939a", sub: "#4a4e55", ui: "#101112", dark: true },
+  { id: "boxmocha", name: "双色盒子", bg: "#252637", fg: "#cdd6f4", sub: "#9399b2", ui: "#1e1e2e", dark: true },
+  { id: "deepsea", name: "深海", bg: "#0b1523", fg: "#a9bcd4", sub: "#58708c", ui: "#122033", dark: true },
+  { id: "forest", name: "墨绿", bg: "#0e1e16", fg: "#a6c2b2", sub: "#567466", ui: "#152820", dark: true },
+  { id: "blackgold", name: "黑金", bg: "#131313", fg: "#d8c489", sub: "#7d7156", ui: "#1c1b18", dark: true },
+  { id: "violet", name: "紫夜", bg: "#1a1526", fg: "#c2b7de", sub: "#6c6290", ui: "#231d33", dark: true },
+  { id: "nord", name: "极夜", bg: "#2e3440", fg: "#d8dee9", sub: "#4f5b6c", ui: "#3b4252", dark: true },
+  { id: "gruvbox", name: "暖石", bg: "#282828", fg: "#ebdbb2", sub: "#928374", ui: "#32302f", dark: true },
+  { id: "rosepine", name: "暮玫", bg: "#191724", fg: "#e0def4", sub: "#6e6a86", ui: "#1f1d2e", dark: true },
+  // ===== 自定义 =====
+  { id: "custom", name: "自定义", bg: "#e8dcc3", fg: "#3a2f22", sub: "#8a7a63", ui: "#e2d4b6", dark: false },
 ];
 
 export const DIALOGUE_COLORS = [

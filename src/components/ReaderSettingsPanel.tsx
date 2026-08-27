@@ -287,48 +287,56 @@ export default function ReaderSettingsPanel({
 
       {/* 主题 */}
       <Section icon={Palette} title="主题配色">
-        <div className="grid grid-cols-4 gap-2">
-          {THEME_PRESETS.map((t) => {
-            const active = settings.theme === t.id;
-            const bg = t.id === "custom" ? settings.customBg : t.bg;
-            const fg = t.id === "custom" ? settings.customFg : t.fg;
-            return (
-              <button
-                key={t.id}
-                onClick={() =>
-                  t.id === "boxmocha"
-                    ? onChange({
-                        ...settings,
-                        theme: t.id,
-                        dialogueColor: "#a6e3a1",
-                        fontFamily: "system",
-                        lineHeight: 1.8,
-                        paragraphSpacing: 0.6,
-                        firstLineIndent: false,
-                        letterSpacing: 0,
-                      })
-                    : set("theme", t.id)
-                }
-                className={`relative overflow-hidden rounded-xl border-2 py-2 transition active:scale-95 ${
-                  active ? "border-current" : "border-transparent"
-                }`}
-                style={{ background: bg }}
-              >
-                <span className="block text-center text-lg leading-none" style={{ color: fg }}>
-                  文
-                </span>
-                <span className="mt-1 block text-center text-[10px]" style={{ color: fg, opacity: 0.7 }}>
-                  {t.name}
-                </span>
-                {active && (
-                  <span className="absolute right-1 top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full" style={{ background: fg }}>
-                    <Check size={9} style={{ color: bg }} />
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+        {([
+          { label: "亮色", dark: false },
+          { label: "暗色 · 夜间护眼", dark: true },
+        ] as const).map((group) => (
+          <div key={group.label}>
+            <p className="mb-1.5 mt-1 text-[10px] tracking-widest opacity-45">{group.label}</p>
+            <div className="grid grid-cols-4 gap-2">
+              {THEME_PRESETS.filter((t) => t.dark === group.dark).map((t) => {
+                const active = settings.theme === t.id;
+                const bg = t.id === "custom" ? settings.customBg : t.bg;
+                const fg = t.id === "custom" ? settings.customFg : t.fg;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() =>
+                      t.id === "boxmocha"
+                        ? onChange({
+                            ...settings,
+                            theme: t.id,
+                            dialogueColor: "#a6e3a1",
+                            fontFamily: "system",
+                            lineHeight: 1.8,
+                            paragraphSpacing: 0.6,
+                            firstLineIndent: false,
+                            letterSpacing: 0,
+                          })
+                        : set("theme", t.id)
+                    }
+                    className={`relative overflow-hidden rounded-xl border-2 py-2 transition active:scale-95 ${
+                      active ? "border-current" : "border-transparent"
+                    }`}
+                    style={{ background: bg }}
+                  >
+                    <span className="block text-center text-lg leading-none" style={{ color: fg }}>
+                      文
+                    </span>
+                    <span className="mt-1 block text-center text-[10px]" style={{ color: fg, opacity: 0.7 }}>
+                      {t.name}
+                    </span>
+                    {active && (
+                      <span className="absolute right-1 top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full" style={{ background: fg }}>
+                        <Check size={9} style={{ color: bg }} />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
         {settings.theme === "custom" && (
           <div className="mt-3 flex items-center gap-5 rounded-2xl border border-black/8 bg-black/[0.03] p-4">
             <ColorField label="背景色" value={settings.customBg} onChange={(v) => set("customBg", v)} />

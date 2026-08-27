@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   BookOpen,
@@ -12,6 +12,8 @@ import {
   Trash2,
   X,
   Combine,
+  PenLine,
+  Check,
 } from "lucide-react";
 import type { BookMeta } from "@/lib/types";
 
@@ -20,7 +22,7 @@ function fmtWords(n: number) {
 }
 
 /** 书籍封面：由色相派生的渐变 + 排版 */
-function Cover({ book, large }: { book: BookMeta; large?: boolean }) {
+function Cover({ book, large, titleSize = 15 }: { book: BookMeta; large?: boolean; titleSize?: number }) {
   const h = book.coverHue;
   return (
     <div
@@ -41,8 +43,14 @@ function Cover({ book, large }: { book: BookMeta; large?: boolean }) {
       </div>
       <div>
         <h3
-          className={`font-serif font-bold leading-snug text-white/95 ${large ? "text-lg" : "text-[15px]"}`}
-          style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+          className={`font-serif font-bold leading-snug text-white/95 ${large ? "text-lg" : ""}`}
+          style={{
+            fontSize: large ? undefined : titleSize,
+            display: "-webkit-box",
+            WebkitLineClamp: titleSize >= 18 ? 2 : 3,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+          }}
         >
           {book.title}
         </h3>
@@ -67,6 +75,25 @@ export default function Library({ initialBooks }: { initialBooks: BookMeta[] }) 
   const [manageId, setManageId] = useState<number | null>(null);
   const [toast, setToast] = useState("");
   const [merging, setMerging] = useState(false);
+  const [coverTitleSize, setCoverTitleSize] = useState(15);
+
+  // 编辑书名/作者
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editAuthor, setEditAuthor] = useState("");
+  const [savingMeta, setSavingMeta] = useState(false);
+
+  // 读取书架设置（封面字号）
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((r) => r.json())
+      .then((d) => {
+        if (typeof d.settings?.coverTitleSize === "number") {
+          setCoverTitleSize(d.settings.coverTitleSize);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -118,6 +145,42 @@ export default function Library({ initialBooks }: { initialBooks: BookMeta[] }) 
     setManageId(null);
     showToast("已删除");
     router.refresh();
+  }
+
+  function startEdit() {
+    if (!managed) return;
+    setEditTitle(managed.title);
+    setEditAuthor(managed.author === "未知作者" ? "" : managed.author);
+    setEditing(true);
+  }
+
+  async function saveMeta() {
+    if (!managed) return;
+    const title = editTitle.trim();
+    if (!title) {
+      showToast("书名不能为空");
+      return;
+    }
+    setSavingMeta(true);
+    try {
+      const res = await fetch(`/api/books/${managed.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, author: editAuthor.trim() || "未知作者" }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || "保存失败");
+        return;
+      }
+      setBooks((bs) => bs.map((b) => (b.id === data.book.id ? { ...b, ...data.book } : b)));
+      setEditing(false);
+      setManageId(null);
+      showToast("已保存");
+      router.refresh();
+    } finally {
+      setSavingMeta(false);
+    }
   }
 
   async function mergeChapters(id: number) {
@@ -181,7 +244,7 @@ export default function Library({ initialBooks }: { initialBooks: BookMeta[] }) 
                 }}
                 className="block w-full text-left transition duration-300 active:scale-95"
               >
-                <Cover book={b} />
+                <Cover book={b} titleSize={coverTitleSize} />
                 <div className="mt-2 flex items-center justify-between px-0.5">
                   <span className="truncate text-[11px] text-zinc-500">
                     {b.chapterCount} 章 · {fmtWords(b.wordCount)}
@@ -251,60 +314,120 @@ export default function Library({ initialBooks }: { initialBooks: BookMeta[] }) 
       {managed && (
         <div
           className="anim-fade-in fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
-          onClick={() => setManageId(null)}
+          onClick={() => {
+            setManageId(null);
+            setEditing(false);
+          }}
         >
           <div
             className="anim-sheet w-full max-w-md rounded-t-3xl border-t border-white/10 bg-zinc-900 p-5 pb-10"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-4 flex items-start gap-3">
-              <div className="w-12 shrink-0">
-                <Cover book={managed} />
+            {editing ? (
+              /* ===== 编辑表单 ===== */
+              <div className="mb-4 space-y-3">
+              <div className="mb-1 flex items-center justify-between">
+                  <h3 className="font-serif font-bold text-zinc-100">编辑书籍信息</h3>
+                  <button
+                    onClick={() => setEditing(false)}
+                    className="rounded-full p-1.5 text-zinc-500 active:bg-white/10"
+                    aria-label="取消编辑"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <label className="block">
+                  <span className="mb-1 block text-[11px] text-zinc-500">书名</span>
+                  <input
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    maxLength={80}
+                    autoFocus
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-amber-500/50"
+                    placeholder="输入书名"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-[11px] text-zinc-500">作者</span>
+                  <input
+                    value={editAuthor}
+                    onChange={(e) => setEditAuthor(e.target.value)}
+                    maxLength={40}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-amber-500/50"
+                    placeholder="未知作者"
+                  />
+                </label>
+                <button
+                  onClick={saveMeta}
+                  disabled={savingMeta}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-600 py-3 text-sm font-semibold text-black transition active:scale-95 disabled:opacity-50"
+                >
+                  {savingMeta ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+                  保存
+                </button>
               </div>
-              <div className="min-w-0 flex-1 pt-1">
-                <h3 className="truncate font-serif font-bold text-zinc-100">{managed.title}</h3>
-                <p className="mt-0.5 text-xs text-zinc-500">
-                  {managed.author} · {managed.chapterCount} 章 · {fmtWords(managed.wordCount)}
-                </p>
+            ) : (
+              /* ===== 信息头 ===== */
+              <div className="mb-4 flex items-start gap-3">
+                <div className="w-12 shrink-0">
+                  <Cover book={managed} titleSize={11} />
+                </div>
+                <div className="min-w-0 flex-1 pt-1">
+                  <h3 className="truncate font-serif font-bold text-zinc-100">{managed.title}</h3>
+                  <p className="mt-0.5 text-xs text-zinc-500">
+                    {managed.author} · {managed.chapterCount} 章 · {fmtWords(managed.wordCount)}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setManageId(null)}
+                  className="rounded-full p-1.5 text-zinc-500 active:bg-white/10"
+                >
+                  <X size={16} />
+                </button>
               </div>
-              <button
-                onClick={() => setManageId(null)}
-                className="rounded-full p-1.5 text-zinc-500 active:bg-white/10"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <button
-              onClick={() => {
-                router.push(`/reader/${managed.id}`);
-                setManageId(null);
-              }}
-              className="mb-2 flex w-full items-center gap-3 rounded-2xl bg-white/5 px-4 py-3.5 text-sm text-zinc-200 transition active:bg-white/10"
-            >
-              <BookOpen size={17} className="text-amber-400" />
-              {managed.progressRatio ? "继续阅读" : "开始阅读"}
-            </button>
-            {managed.chapterCount > 1 && (
-              <button
-                onClick={() => mergeChapters(managed.id)}
-                disabled={merging}
-                className="mb-2 flex w-full items-center gap-3 rounded-2xl bg-white/5 px-4 py-3.5 text-sm text-zinc-200 transition active:bg-white/10 disabled:opacity-50"
-              >
-                {merging ? (
-                  <Loader2 size={17} className="animate-spin text-sky-400" />
-                ) : (
-                  <Combine size={17} className="text-sky-400" />
-                )}
-                合并为一章（当前 {managed.chapterCount} 章）
-              </button>
             )}
-            <button
-              onClick={() => removeBook(managed.id)}
-              className="flex w-full items-center gap-3 rounded-2xl bg-red-500/10 px-4 py-3.5 text-sm text-red-400 transition active:bg-red-500/20"
-            >
-              <Trash2 size={17} />
-              从书架删除
-            </button>
+            {!editing && (
+              <>
+                <button
+                  onClick={() => {
+                    router.push(`/reader/${managed.id}`);
+                    setManageId(null);
+                  }}
+                  className="mb-2 flex w-full items-center gap-3 rounded-2xl bg-white/5 px-4 py-3.5 text-sm text-zinc-200 transition active:bg-white/10"
+                >
+                  <BookOpen size={17} className="text-amber-400" />
+                  {managed.progressRatio ? "继续阅读" : "开始阅读"}
+                </button>
+                <button
+                  onClick={startEdit}
+                  className="mb-2 flex w-full items-center gap-3 rounded-2xl bg-white/5 px-4 py-3.5 text-sm text-zinc-200 transition active:bg-white/10"
+                >
+                  <PenLine size={17} className="text-emerald-400" />
+                  编辑书名 / 作者
+                </button>
+                {managed.chapterCount > 1 && (
+                  <button
+                    onClick={() => mergeChapters(managed.id)}
+                    disabled={merging}
+                    className="mb-2 flex w-full items-center gap-3 rounded-2xl bg-white/5 px-4 py-3.5 text-sm text-zinc-200 transition active:bg-white/10 disabled:opacity-50"
+                  >
+                    {merging ? (
+                      <Loader2 size={17} className="animate-spin text-sky-400" />
+                    ) : (
+                      <Combine size={17} className="text-sky-400" />
+                    )}
+                    合并为一章（当前 {managed.chapterCount} 章）
+                  </button>
+                )}
+                <button
+                  onClick={() => removeBook(managed.id)}
+                  className="flex w-full items-center gap-3 rounded-2xl bg-red-500/10 px-4 py-3.5 text-sm text-red-400 transition active:bg-red-500/20"
+                >
+                  <Trash2 size={17} />
+                  从书架删除
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
