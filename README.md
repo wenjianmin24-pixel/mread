@@ -29,7 +29,7 @@
    - Build: `npm install && npx next build`
    - Start: `npx next start`
    - 环境变量：`DATABASE_URL` = PostgreSQL 连接串
-3. 部署后在 Shell 执行：`npx drizzle-kit push`
+3. 启动命令已包含自动建表，无需额外操作
 
 ## 本地开发
 
