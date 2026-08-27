@@ -1,0 +1,220 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  ArrowLeft,
+  Check,
+  FileUp,
+  Loader2,
+  RotateCcw,
+  Trash2,
+  Type,
+  Quote,
+  Palette,
+  MousePointerClick,
+  Info,
+} from "lucide-react";
+import { DEFAULT_SETTINGS } from "@/lib/types";
+
+interface FontMeta {
+  id: number;
+  name: string;
+  fileName: string;
+  mime: string;
+}
+
+export default function SettingsPage({ initialFonts }: { initialFonts: FontMeta[] }) {
+  const router = useRouter();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [fontList, setFontList] = useState(initialFonts);
+  const [uploading, setUploading] = useState(false);
+  const [toast, setToast] = useState("");
+
+  const showToast = (m: string) => {
+    setToast(m);
+    setTimeout(() => setToast(""), 2200);
+  };
+
+  // 为每个已上传字体注入 @font-face 以便预览
+  useEffect(() => {
+    const style = document.createElement("style");
+    style.textContent = fontList
+      .map(
+        (f) =>
+          `@font-face{font-family:"custom-font-${f.id}";src:url("/api/fonts/${f.id}/file") format("${
+            f.mime.includes("woff2") ? "woff2" : f.mime.includes("woff") ? "woff" : "truetype"
+          }");font-display:swap;}`
+      )
+      .join("\n");
+    document.head.appendChild(style);
+    return () => style.remove();
+  }, [fontList]);
+
+  async function upload(files: FileList | null) {
+    if (!files?.length) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const form = new FormData();
+        form.append("file", file);
+        const res = await fetch("/api/fonts", { method: "POST", body: form });
+        const data = await res.json();
+        if (!res.ok) {
+          showToast(data.error || "上传失败");
+          continue;
+        }
+        setFontList((fs) => [data.font, ...fs]);
+        showToast(`字体「${data.font.name}」已导入`);
+      }
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  async function remove(id: number) {
+    await fetch(`/api/fonts/${id}`, { method: "DELETE" });
+    setFontList((fs) => fs.filter((f) => f.id !== id));
+    showToast("已删除字体");
+  }
+
+  async function resetSettings() {
+    await fetch("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(DEFAULT_SETTINGS),
+    });
+    showToast("已恢复默认阅读设置");
+  }
+
+  return (
+    <div className="mx-auto min-h-dvh max-w-2xl px-5 pb-20 pt-6">
+      {/* 顶栏 */}
+      <header className="flex items-center gap-3">
+        <button
+          onClick={() => router.back()}
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-300 transition active:scale-90"
+        >
+          <ArrowLeft size={18} />
+        </button>
+        <h1 className="font-serif text-xl font-bold text-zinc-100">设置与字体</h1>
+      </header>
+
+      {/* 字体管理 */}
+      <section className="anim-fade-up mt-8">
+        <div className="flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-sm font-semibold tracking-wide text-zinc-300">
+            <Type size={15} className="text-amber-400" />
+            我的字体
+          </h2>
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-amber-400 to-amber-600 px-3.5 py-1.5 text-xs font-semibold text-black transition active:scale-95"
+          >
+            {uploading ? <Loader2 size={13} className="animate-spin" /> : <FileUp size={13} />}
+            导入字体
+          </button>
+        </div>
+        <p className="mt-1.5 text-xs text-zinc-600">
+          支持 .ttf / .otf / .woff / .woff2，导入后可在阅读器「字体」设置中选用
+        </p>
+
+        <div className="mt-4 space-y-2.5">
+          {fontList.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] px-4 py-8 text-center text-xs text-zinc-600">
+              还没有导入字体 —— 试试导入一款喜欢的中文宋体或楷体
+            </div>
+          )}
+          {fontList.map((f) => (
+            <div
+              key={f.id}
+              className="flex items-center gap-4 rounded-2xl border border-white/8 bg-white/[0.04] px-4 py-3.5"
+            >
+              <span
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-zinc-700 to-zinc-800 text-xl text-amber-200"
+                style={{ fontFamily: `"custom-font-${f.id}"` }}
+              >
+                永
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-zinc-200">{f.name}</p>
+                <p className="truncate text-[11px] text-zinc-600">{f.fileName}</p>
+                <p
+                  className="mt-0.5 truncate text-[13px] text-zinc-400"
+                  style={{ fontFamily: `"custom-font-${f.id}"` }}
+                >
+                  书山有路勤为径，学海无涯苦作舟
+                </p>
+              </div>
+              <button
+                onClick={() => remove(f.id)}
+                className="rounded-full p-2 text-zinc-600 transition hover:text-red-400 active:scale-90"
+                aria-label="删除字体"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 阅读偏好说明 */}
+      <section className="anim-fade-up mt-10" style={{ animationDelay: "0.1s" }}>
+        <h2 className="flex items-center gap-2 text-sm font-semibold tracking-wide text-zinc-300">
+          <Palette size={15} className="text-amber-400" />
+          个性化能力
+        </h2>
+        <div className="mt-3 grid grid-cols-2 gap-2.5">
+          {[
+            { icon: Type, t: "字体字号", d: "4 款内置字族 + 自定义导入字体" },
+            { icon: Quote, t: "对话着色", d: "自动识别引号对白，支持多彩轮换" },
+            { icon: Palette, t: "主题配色", d: "8 款预设主题 + 自定义背景/文字色" },
+            { icon: MousePointerClick, t: "翻页方式", d: "沉浸滚动 / 横向仿真分页" },
+          ].map((c) => (
+            <div key={c.t} className="rounded-2xl border border-white/8 bg-white/[0.04] p-3.5">
+              <c.icon size={16} className="text-amber-400/80" />
+              <p className="mt-2 text-[13px] font-medium text-zinc-200">{c.t}</p>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-zinc-500">{c.d}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 恢复默认 */}
+      <section className="anim-fade-up mt-10" style={{ animationDelay: "0.15s" }}>
+        <button
+          onClick={resetSettings}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] py-3.5 text-sm text-zinc-300 transition active:bg-white/10"
+        >
+          <RotateCcw size={15} />
+          恢复默认阅读设置
+        </button>
+        <div className="mt-6 flex items-start gap-2 rounded-2xl bg-amber-500/5 p-4 text-[11px] leading-relaxed text-zinc-500">
+          <Info size={14} className="mt-0.5 shrink-0 text-amber-400/70" />
+          <p>
+            提示：在安卓 Chrome 中打开本应用后，可通过菜单「添加到主屏幕」将它安装为独立应用，
+            获得全屏沉浸的阅读体验。阅读时点击屏幕中央呼出菜单，两侧轻点翻页。
+          </p>
+        </div>
+      </section>
+
+      {toast && (
+        <div className="anim-fade-up fixed bottom-10 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/10 bg-zinc-800/95 px-4 py-2 text-xs text-zinc-200 shadow-2xl">
+          <Check size={13} className="text-emerald-400" />
+          {toast}
+        </div>
+      )}
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2"
+        multiple
+        hidden
+        onChange={(e) => upload(e.target.files)}
+      />
+    </div>
+  );
+}

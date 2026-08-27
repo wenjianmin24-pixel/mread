@@ -1,0 +1,673 @@
+"use client";
+
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { marked } from "marked";
+import {
+  ArrowLeft,
+  Bookmark as BookmarkIcon,
+  ChevronLeft,
+  ChevronRight,
+  List,
+  Loader2,
+  MoonStar,
+  Type as TypeIcon,
+} from "lucide-react";
+import { highlightDialogue } from "@/lib/dialogue";
+import {
+  BOXMOCHA_RAINBOW,
+  DEFAULT_SETTINGS,
+  FONT_STACKS,
+  RAINBOW_COLORS,
+  THEME_PRESETS,
+  type ChapterMeta,
+  type ReaderSettings,
+} from "@/lib/types";
+import ReaderSettingsPanel from "./ReaderSettingsPanel";
+import ChapterDrawer, { type BookmarkRow } from "./ChapterDrawer";
+
+interface BookData {
+  id: number;
+  title: string;
+  format: string;
+}
+
+function escapeHtml(s: string) {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function sanitize(html: string) {
+  return html
+    .replace(/<(script|iframe|object|embed)[\s\S]*?<\/\1>/gi, "")
+    .replace(/ on\w+="[^"]*"/gi, "")
+    .replace(/ on\w+='[^']*'/gi, "")
+    .replace(/javascript:/gi, "");
+}
+
+function renderChapter(content: string, format: string): string {
+  if (format === "md") {
+    return sanitize(marked.parse(content, { async: false, gfm: true, breaks: false }) as string);
+  }
+  return content
+    .split(/\n+/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => `<p>${escapeHtml(l)}</p>`)
+    .join("\n");
+}
+
+export default function Reader({ bookId }: { bookId: number }) {
+  const router = useRouter();
+  const [book, setBook] = useState<BookData | null>(null);
+  const [chapters, setChapters] = useState<ChapterMeta[]>([]);
+  const [currentId, setCurrentId] = useState<number | null>(null);
+  const [html, setHtml] = useState("");
+  const [settings, setSettings] = useState<ReaderSettings>(DEFAULT_SETTINGS);
+  const [bookmarks, setBookmarks] = useState<BookmarkRow[]>([]);
+  const [uiVisible, setUiVisible] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [chapterLoading, setChapterLoading] = useState(false);
+  const [progressInfo, setProgressInfo] = useState({ ratio: 0, page: 1, pages: 1 });
+  const [markedBook, setMarkedBook] = useState(false);
+
+  const contentRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null); // paged 模式滚动容器
+  const restoreRef = useRef<{ ratio: number | null; pending: boolean }>({ ratio: null, pending: false });
+  const initProgRef = useRef<{ chapterId: number; scrollRatio: number } | null>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const settingsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ratioRef = useRef(0);
+  const currentIdRef = useRef<number | null>(null);
+  const pagedRef = useRef(false);
+  const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
+
+  currentIdRef.current = currentId;
+  pagedRef.current = settings.pageMode === "paged";
+
+  const theme =
+    THEME_PRESETS.find((t) => t.id === settings.theme) ?? THEME_PRESETS[0];
+  const bg = settings.theme === "custom" ? settings.customBg : theme.bg;
+  const fg = settings.theme === "custom" ? settings.customFg : theme.fg;
+  const sub = theme.sub;
+  const ui = theme.ui;
+
+  const fontFamily = settings.fontFamily.startsWith("custom:")
+    ? `"custom-font-${settings.fontFamily.split(":")[1]}"`
+    : FONT_STACKS[settings.fontFamily] ?? FONT_STACKS.serif;
+
+  /* ---------- 初始加载 ---------- */
+  useEffect(() => {
+    (async () => {
+      try {
+        const [bookRes, setRes, fontRes, markRes] = await Promise.all([
+          fetch(`/api/books/${bookId}`),
+          fetch("/api/settings"),
+          fetch("/api/fonts"),
+          fetch(`/api/bookmarks?bookId=${bookId}`),
+        ]);
+        const bookData = await bookRes.json();
+        const setData = await setRes.json();
+        const fontData = await fontRes.json();
+        const markData = await markRes.json();
+
+        if (!bookRes.ok) {
+          router.replace("/");
+          return;
+        }
+        setSettings({ ...DEFAULT_SETTINGS, ...setData.settings });
+        setBookmarks(markData.bookmarks ?? []);
+
+        // 注入自定义字体
+        if (fontData.fonts?.length) {
+          const style = document.createElement("style");
+          style.id = "custom-fonts";
+          style.textContent = fontData.fonts
+            .map((f: { id: number; mime: string }) =>
+              `@font-face{font-family:"custom-font-${f.id}";src:url("/api/fonts/${f.id}/file");font-display:swap;}`
+            )
+            .join("\n");
+          document.head.appendChild(style);
+        }
+
+        setBook(bookData.book);
+        setChapters(bookData.chapters);
+        if (bookData.progress) {
+          initProgRef.current = {
+            chapterId: bookData.progress.chapterId,
+            scrollRatio: bookData.progress.scrollRatio,
+          };
+          setCurrentId(bookData.progress.chapterId);
+        } else if (bookData.chapters.length > 0) {
+          setCurrentId(bookData.chapters[0].id);
+        }
+      } finally {
+        setLoading(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookId]);
+
+  /* ---------- 章节内容加载 ---------- */
+  useEffect(() => {
+    if (currentId == null) return;
+    let cancelled = false;
+    setChapterLoading(true);
+    fetch(`/api/chapters/${currentId}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled || !d.chapter) return;
+        // 决定恢复位置：同一章用记忆进度，否则回到开头
+        const init = initProgRef.current;
+        restoreRef.current = {
+          ratio: init && init.chapterId === currentId ? init.scrollRatio : 0,
+          pending: true,
+        };
+        initProgRef.current = null;
+        setHtml(renderChapter(d.chapter.content, book?.format ?? "txt"));
+        setMarkedBook(false);
+        setChapterLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentId, book?.format]);
+
+  /* ---------- HTML 注入后：对话高亮 + 恢复位置 ---------- */
+  useLayoutEffect(() => {
+    const el = contentRef.current;
+    if (!el || !html) return;
+    el.innerHTML = html;
+    if (settings.dialogueEnabled) {
+      highlightDialogue(el, { rainbow: settings.dialogueRainbow, bold: settings.dialogueBold });
+    }
+    // 恢复滚动位置
+    const r = restoreRef.current;
+    if (r.pending && r.ratio != null) {
+      r.pending = false;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => applyRatio(r.ratio ?? 0));
+      });
+    }
+    measure();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [html, settings.dialogueEnabled, settings.dialogueRainbow, settings.dialogueBold, settings.fontSize, settings.lineHeight, settings.letterSpacing, settings.paragraphSpacing, settings.sidePadding, settings.pageMode, settings.firstLineIndent, settings.fontFamily]);
+
+  /* ---------- 分页模式列宽 ---------- */
+  useLayoutEffect(() => {
+    if (settings.pageMode !== "paged") return;
+    const vp = viewportRef.current;
+    const el = contentRef.current;
+    if (!vp || !el) return;
+    const colWidth = vp.clientWidth - settings.sidePadding * 2;
+    el.style.columnWidth = `${colWidth}px`;
+    el.style.columnGap = `${settings.sidePadding * 2}px`;
+    requestAnimationFrame(() => {
+      if (restoreRef.current.pending && restoreRef.current.ratio != null) {
+        restoreRef.current.pending = false;
+        applyRatio(restoreRef.current.ratio);
+      }
+      measure();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [html, settings.pageMode, settings.sidePadding, settings.fontSize, settings.lineHeight, uiVisible]);
+
+  /* ---------- 设置持久化（防抖） ---------- */
+  useEffect(() => {
+    if (loading) return;
+    if (settingsTimer.current) clearTimeout(settingsTimer.current);
+    settingsTimer.current = setTimeout(() => {
+      fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      }).catch(() => {});
+    }, 600);
+    return () => {
+      if (settingsTimer.current) clearTimeout(settingsTimer.current);
+    };
+  }, [settings, loading]);
+
+  /* ---------- 屏幕常亮 ---------- */
+  useEffect(() => {
+    let cancelled = false;
+    async function acquire() {
+      try {
+        const nav = navigator as Navigator & { wakeLock?: { request: (t: string) => Promise<{ release: () => Promise<void> }> } };
+        if (settings.keepAwake && nav.wakeLock) {
+          const lock = await nav.wakeLock.request("screen");
+          if (!cancelled) wakeLockRef.current = lock;
+        }
+      } catch {
+        /* 不支持则忽略 */
+      }
+    }
+    acquire();
+    return () => {
+      cancelled = true;
+      wakeLockRef.current?.release().catch(() => {});
+      wakeLockRef.current = null;
+    };
+  }, [settings.keepAwake]);
+
+  /* ---------- 进度测量与保存 ---------- */
+  const applyRatio = useCallback((ratio: number) => {
+    if (pagedRef.current) {
+      const vp = viewportRef.current;
+      if (!vp) return;
+      const max = vp.scrollWidth - vp.clientWidth;
+      vp.scrollLeft = ratio * Math.max(max, 0);
+    } else {
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      window.scrollTo({ top: ratio * Math.max(max, 0) });
+    }
+  }, []);
+
+  const measure = useCallback(() => {
+    let ratio = 0;
+    let page = 1;
+    let pages = 1;
+    if (pagedRef.current) {
+      const vp = viewportRef.current;
+      if (vp) {
+        const cw = vp.clientWidth || 1;
+        const max = Math.max(vp.scrollWidth - cw, 1);
+        ratio = Math.min(1, Math.max(0, vp.scrollLeft / max));
+        pages = Math.max(1, Math.round(max / cw) + 1);
+        page = Math.min(pages, Math.round(vp.scrollLeft / cw) + 1);
+      }
+    } else {
+      const max = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1);
+      ratio = Math.min(1, Math.max(0, window.scrollY / max));
+      const el = contentRef.current;
+      if (el) {
+        const textLen = el.innerText.length || 1;
+        const per = Math.max(1, Math.round(textLen / 900));
+        pages = per;
+        page = Math.min(per, Math.floor(ratio * per) + 1);
+      }
+    }
+    ratioRef.current = ratio;
+    setProgressInfo({ ratio, page, pages });
+
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      const cid = currentIdRef.current;
+      if (cid == null) return;
+      fetch("/api/progress", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookId, chapterId: cid, scrollRatio: ratio }),
+      }).catch(() => {});
+    }, 800);
+  }, [bookId]);
+
+  /* ---------- 滚动监听 ---------- */
+  useEffect(() => {
+    if (loading) return;
+    const target: (Window | HTMLElement) =
+      settings.pageMode === "paged" && viewportRef.current ? viewportRef.current : window;
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        measure();
+        ticking = false;
+      });
+    };
+    target.addEventListener("scroll", onScroll, { passive: true });
+    return () => target.removeEventListener("scroll", onScroll);
+  }, [loading, settings.pageMode, measure, html]);
+
+  /* ---------- 导航 ---------- */
+  const currentIdx = chapters.findIndex((c) => c.id === currentId);
+
+  const goChapter = useCallback(
+    (id: number, ratio = 0) => {
+      initProgRef.current = ratio > 0 ? { chapterId: id, scrollRatio: ratio } : null;
+      setCurrentId(id);
+      setUiVisible(false);
+      setDrawerOpen(false);
+    },
+    []
+  );
+
+  const nextPage = useCallback(() => {
+    if (pagedRef.current) {
+      const vp = viewportRef.current;
+      if (!vp) return;
+      const atEnd = vp.scrollLeft >= vp.scrollWidth - vp.clientWidth - 8;
+      if (atEnd) {
+        if (currentIdx < chapters.length - 1) goChapter(chapters[currentIdx + 1].id);
+      } else {
+        vp.scrollBy({ left: vp.clientWidth, behavior: "smooth" });
+      }
+    } else {
+      const nearBottom =
+        window.scrollY >= document.documentElement.scrollHeight - window.innerHeight - 8;
+      if (nearBottom) {
+        if (currentIdx < chapters.length - 1) goChapter(chapters[currentIdx + 1].id);
+      } else {
+        window.scrollBy({ top: window.innerHeight * 0.92, behavior: "smooth" });
+      }
+    }
+  }, [chapters, currentIdx, goChapter]);
+
+  const prevPage = useCallback(() => {
+    if (pagedRef.current) {
+      const vp = viewportRef.current;
+      if (!vp) return;
+      if (vp.scrollLeft <= 8) {
+        if (currentIdx > 0) goChapter(chapters[currentIdx - 1].id);
+      } else {
+        vp.scrollBy({ left: -vp.clientWidth, behavior: "smooth" });
+      }
+    } else {
+      if (window.scrollY <= 8) {
+        if (currentIdx > 0) goChapter(chapters[currentIdx - 1].id);
+      } else {
+        window.scrollBy({ top: -window.innerHeight * 0.92, behavior: "smooth" });
+      }
+    }
+  }, [chapters, currentIdx, goChapter]);
+
+  const onTapZone = (e: React.MouseEvent) => {
+    if (panelOpen || drawerOpen) return;
+    const x = e.clientX / window.innerWidth;
+    if (x < 0.28) prevPage();
+    else if (x > 0.72) nextPage();
+    else setUiVisible((v) => !v);
+  };
+
+  /* ---------- 书签 ---------- */
+  async function toggleBookmark() {
+    if (currentId == null) return;
+    const el = contentRef.current;
+    const text = el?.innerText ?? "";
+    const pos = Math.floor(text.length * ratioRef.current);
+    const excerpt = text.slice(pos, pos + 60).replace(/\s+/g, " ").trim();
+    const res = await fetch("/api/bookmarks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bookId, chapterId: currentId, scrollRatio: ratioRef.current, excerpt }),
+    });
+    const data = await res.json();
+    if (data.bookmark) {
+      setBookmarks((bs) => [data.bookmark, ...bs]);
+      setMarkedBook(true);
+      setTimeout(() => setMarkedBook(false), 1600);
+    }
+  }
+
+  async function deleteBookmark(id: number) {
+    await fetch(`/api/bookmarks/${id}`, { method: "DELETE" });
+    setBookmarks((bs) => bs.filter((b) => b.id !== id));
+  }
+
+  /* ---------- 渲染 ---------- */
+  if (loading) {
+    return (
+      <div className="flex h-dvh flex-col items-center justify-center gap-3" style={{ background: DEFAULT_SETTINGS.theme === "paper" ? "#f6f3ec" : "#f6f3ec", color: "#8a8478" }}>
+        <Loader2 className="animate-spin" size={26} />
+        <p className="text-sm">正在翻开书页…</p>
+      </div>
+    );
+  }
+
+  const rainbowPalette = theme.id === "boxmocha" ? BOXMOCHA_RAINBOW : RAINBOW_COLORS;
+
+  const dlgVars = {
+    "--dlg-color": settings.dialogueColor,
+    "--dlg-c0": rainbowPalette[0],
+    "--dlg-c1": rainbowPalette[1],
+    "--dlg-c2": rainbowPalette[2],
+    "--dlg-c3": rainbowPalette[3],
+    "--dlg-c4": rainbowPalette[4],
+    "--dlg-c5": rainbowPalette[5],
+  } as React.CSSProperties;
+
+  const textStyle: React.CSSProperties = {
+    fontFamily,
+    fontSize: settings.fontSize,
+    lineHeight: settings.lineHeight,
+    letterSpacing: settings.letterSpacing > 0 ? settings.letterSpacing : undefined,
+    ["--para-gap" as string]: `${settings.paragraphSpacing}em`,
+  };
+
+  const currentChapter = chapters[currentIdx];
+
+  return (
+    <div
+      className={`h-dvh w-full overflow-hidden ${theme.id === "boxmocha" ? "theme-boxmocha" : ""}`}
+      style={{ background: bg, color: fg, ...dlgVars }}
+    >
+      {/* ===== 内容区 ===== */}
+      {settings.pageMode === "scroll" ? (
+        <div
+          className="h-full overflow-y-auto no-scrollbar"
+          onClick={onTapZone}
+          style={{ WebkitOverflowScrolling: "touch" }}
+        >
+          <div
+            className={`mx-auto min-h-full ${theme.id === "boxmocha" ? "max-w-none" : "max-w-3xl"}`}
+            style={{
+              paddingLeft: settings.sidePadding,
+              paddingRight: settings.sidePadding,
+              paddingTop: "max(3.5rem, env(safe-area-inset-top))",
+              paddingBottom: "45dvh",
+            }}
+          >
+            {currentChapter && (
+              <h1
+                className="mb-8 text-center font-bold"
+                style={{ fontSize: settings.fontSize * 1.3, fontFamily, lineHeight: 1.5 }}
+              >
+                {currentChapter.title}
+              </h1>
+            )}
+            <div
+              ref={contentRef}
+              className={`reader-content ${settings.firstLineIndent ? "indent" : ""}`}
+              style={textStyle}
+            />
+            {currentIdx === chapters.length - 1 && html && (
+              <p className="mt-16 text-center text-xs tracking-[0.4em]" style={{ color: sub }}>
+                · 全书完 ·
+              </p>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div ref={viewportRef} className="paged-viewport h-full w-full" onClick={onTapZone}>
+          <div
+            ref={contentRef}
+            className={`reader-content paged-columns ${settings.firstLineIndent ? "indent" : ""}`}
+            style={{
+              ...textStyle,
+              paddingTop: "max(3.5rem, env(safe-area-inset-top))",
+              paddingBottom: "4.5rem",
+              paddingLeft: settings.sidePadding,
+              paddingRight: settings.sidePadding,
+              boxSizing: "border-box",
+            }}
+          />
+        </div>
+      )}
+
+      {/* 章节加载指示 */}
+      {chapterLoading && (
+        <div className="pointer-events-none fixed inset-0 z-20 flex items-center justify-center" style={{ background: bg }}>
+          <Loader2 className="animate-spin" size={24} style={{ color: sub }} />
+        </div>
+      )}
+
+      {/* 亮度遮罩 */}
+      {settings.brightness < 1 && (
+        <div
+          className="pointer-events-none fixed inset-0 z-30 bg-black"
+          style={{ opacity: 1 - settings.brightness }}
+        />
+      )}
+
+      {/* ===== 顶部工具栏 ===== */}
+      <header
+        className="fixed inset-x-0 top-0 z-40 transition-transform duration-300"
+        style={{
+          transform: uiVisible ? "translateY(0)" : "translateY(-110%)",
+          background: ui,
+          color: fg,
+          paddingTop: "env(safe-area-inset-top)",
+          boxShadow: "0 1px 0 rgba(0,0,0,0.08), 0 8px 24px -12px rgba(0,0,0,0.25)",
+        }}
+      >
+        <div className="mx-auto flex h-14 max-w-3xl items-center gap-1 px-2">
+          <button
+            onClick={() => router.push("/")}
+            className="flex h-10 w-10 items-center justify-center rounded-full transition active:scale-90 active:bg-black/10"
+            aria-label="返回书架"
+          >
+            <ArrowLeft size={19} />
+          </button>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold">{book?.title}</p>
+            <p className="truncate text-[11px]" style={{ color: sub }}>
+              {currentChapter?.title ?? ""}
+            </p>
+          </div>
+          <button
+            onClick={toggleBookmark}
+            className="flex h-10 w-10 items-center justify-center rounded-full transition active:scale-90 active:bg-black/10"
+            aria-label="添加书签"
+          >
+            <BookmarkIcon size={18} fill={markedBook ? "currentColor" : "none"} />
+          </button>
+          <button
+            onClick={() => setDrawerOpen(true)}
+            className="flex h-10 w-10 items-center justify-center rounded-full transition active:scale-90 active:bg-black/10"
+            aria-label="目录"
+          >
+            <List size={19} />
+          </button>
+        </div>
+      </header>
+
+      {/* ===== 底部工具栏 ===== */}
+      <footer
+        className="fixed inset-x-0 bottom-0 z-40 transition-transform duration-300"
+        style={{
+          transform: uiVisible ? "translateY(0)" : "translateY(110%)",
+          background: ui,
+          color: fg,
+          paddingBottom: "env(safe-area-inset-bottom)",
+          boxShadow: "0 -1px 0 rgba(0,0,0,0.08), 0 -8px 24px -12px rgba(0,0,0,0.25)",
+        }}
+      >
+        <div className="mx-auto max-w-3xl px-5 pb-3 pt-3">
+          <div className="mb-2.5 flex items-center justify-between text-[11px]" style={{ color: sub }}>
+            <span>
+              第 {currentIdx + 1}/{chapters.length} 章
+              {settings.pageMode === "paged" && ` · ${progressInfo.page}/${progressInfo.pages} 页`}
+            </span>
+            <span className="tabular-nums">{Math.round(progressInfo.ratio * 100)}%</span>
+          </div>
+          <div className="h-1 w-full overflow-hidden rounded-full" style={{ background: "rgba(0,0,0,0.12)" }}>
+            <div
+              className="h-full rounded-full transition-[width] duration-150"
+              style={{ width: `${progressInfo.ratio * 100}%`, background: fg }}
+            />
+          </div>
+          <div className="mt-3 flex items-center justify-between">
+            <button
+              onClick={() => currentIdx > 0 && goChapter(chapters[currentIdx - 1].id)}
+              disabled={currentIdx <= 0}
+              className="flex items-center gap-1 rounded-full px-3 py-2 text-xs transition active:scale-95 disabled:opacity-30"
+            >
+              <ChevronLeft size={15} />
+              上一章
+            </button>
+            <button
+              onClick={() => setPanelOpen(true)}
+              className="flex items-center gap-2 rounded-full px-5 py-2.5 text-xs font-semibold shadow-lg transition active:scale-95"
+              style={{ background: fg, color: ui }}
+            >
+              <TypeIcon size={14} />
+              阅读设置
+            </button>
+            <button
+              onClick={() => currentIdx < chapters.length - 1 && goChapter(chapters[currentIdx + 1].id)}
+              disabled={currentIdx >= chapters.length - 1}
+              className="flex items-center gap-1 rounded-full px-3 py-2 text-xs transition active:scale-95 disabled:opacity-30"
+            >
+              下一章
+              <ChevronRight size={15} />
+            </button>
+          </div>
+        </div>
+      </footer>
+
+      {/* ===== 常显底部进度（UI 隐藏时） ===== */}
+      {settings.showFooter && !uiVisible && !panelOpen && (
+        <div
+          className="pointer-events-none fixed inset-x-0 bottom-0 z-10 flex items-center justify-between px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 text-[10px] tabular-nums"
+          style={{ color: sub }}
+        >
+          <span className="truncate">{currentChapter?.title}</span>
+          <span>{Math.round(progressInfo.ratio * 100)}%</span>
+        </div>
+      )}
+
+      {/* ===== 目录抽屉 ===== */}
+      {drawerOpen && book && (
+        <ChapterDrawer
+          bookTitle={book.title}
+          chapters={chapters}
+          currentId={currentId}
+          bookmarks={bookmarks}
+          fg={fg}
+          sub={sub}
+          ui={ui}
+          onClose={() => setDrawerOpen(false)}
+          onJump={(id) => goChapter(id)}
+          onJumpBookmark={(b) => {
+            goChapter(b.chapterId, b.scrollRatio);
+          }}
+          onDeleteBookmark={deleteBookmark}
+        />
+      )}
+
+      {/* ===== 设置面板 ===== */}
+      {panelOpen && (
+        <div className="anim-fade-in fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px]" onClick={() => setPanelOpen(false)}>
+          <div
+            className="anim-sheet absolute inset-x-0 bottom-0 mx-auto max-w-3xl rounded-t-3xl pt-3"
+            style={{ background: ui, color: fg, paddingBottom: "env(safe-area-inset-bottom)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto mb-2 h-1 w-10 rounded-full" style={{ background: sub, opacity: 0.4 }} />
+            <div className="flex items-center justify-between px-5 pb-1">
+              <h3 className="flex items-center gap-2 text-sm font-bold">
+                <MoonStar size={15} />
+                阅读设置
+              </h3>
+              <button
+                onClick={() => setPanelOpen(false)}
+                className="rounded-full px-3 py-1 text-xs transition active:scale-95"
+                style={{ background: "rgba(0,0,0,0.08)" }}
+              >
+                完成
+              </button>
+            </div>
+            <ReaderSettingsPanel settings={settings} onChange={setSettings} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

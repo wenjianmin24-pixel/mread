@@ -1,0 +1,20 @@
+# Render Blueprint — 用于 Render Infra as Code 自动配置
+# 如果手动部署 Web Service 可忽略此文件，直接看 README
+
+services:
+  - type: web
+    name: mread
+    runtime: node
+    plan: free
+    buildCommand: npm install && npx next build
+    startCommand: npx next start
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mread-db
+          property: connectionString
+
+databases:
+  - name: mread-db
+    plan: free
+    region: singapore

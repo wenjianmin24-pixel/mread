@@ -1,0 +1,234 @@
+@import "tailwindcss";
+
+:root {
+  --app-bg: #101013;
+  --app-surface: #1a1b20;
+  --app-border: rgba(255, 255, 255, 0.08);
+  --accent: #e0a458;
+}
+
+html,
+body {
+  height: 100%;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--app-bg);
+  color: #ece7df;
+  font-family: -apple-system, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+/* ===== 阅读器排版 ===== */
+.reader-content {
+  word-break: break-word;
+  text-rendering: optimizeLegibility;
+}
+.reader-content p {
+  margin: 0 0 var(--para-gap, 1em) 0;
+}
+.reader-content.indent p {
+  text-indent: 2em;
+}
+.reader-content h1,
+.reader-content h2,
+.reader-content h3 {
+  font-weight: 700;
+  line-height: 1.5;
+  margin: 0 0 1.2em 0;
+  break-after: avoid;
+}
+.reader-content h1 {
+  font-size: 1.45em;
+}
+.reader-content h2 {
+  font-size: 1.25em;
+}
+.reader-content h3 {
+  font-size: 1.1em;
+}
+.reader-content blockquote {
+  margin: 1em 0;
+  padding: 0.2em 0 0.2em 1em;
+  border-left: 3px solid color-mix(in srgb, currentColor 35%, transparent);
+  opacity: 0.82;
+}
+.reader-content em {
+  font-style: italic;
+}
+.reader-content strong {
+  font-weight: 700;
+}
+.reader-content hr {
+  border: none;
+  text-align: center;
+  margin: 2em 0;
+}
+.reader-content hr::after {
+  content: "· · ·";
+  letter-spacing: 0.6em;
+  opacity: 0.5;
+}
+
+/* ===== 对话高亮 ===== */
+.dlg {
+  color: var(--dlg-color, inherit);
+  transition: color 0.25s ease;
+}
+.dlg-bold {
+  font-weight: 600;
+}
+.dlg-c0 { color: var(--dlg-c0); }
+.dlg-c1 { color: var(--dlg-c1); }
+.dlg-c2 { color: var(--dlg-c2); }
+.dlg-c3 { color: var(--dlg-c3); }
+.dlg-c4 { color: var(--dlg-c4); }
+.dlg-c5 { color: var(--dlg-c5); }
+
+/* ===== 横向分页模式 ===== */
+.paged-viewport {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  height: 100%;
+}
+.paged-viewport::-webkit-scrollbar {
+  display: none;
+}
+.paged-columns {
+  height: 100%;
+  column-fill: auto;
+  column-gap: 0;
+}
+
+/* ===== 动画 ===== */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes sheetUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes drawerIn {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+.anim-fade-up { animation: fadeUp 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.anim-fade-in { animation: fadeIn 0.25s ease both; }
+.anim-sheet { animation: sheetUp 0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.anim-drawer { animation: drawerIn 0.3s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+.stagger > * { animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.stagger > *:nth-child(1) { animation-delay: 0.03s; }
+.stagger > *:nth-child(2) { animation-delay: 0.08s; }
+.stagger > *:nth-child(3) { animation-delay: 0.13s; }
+.stagger > *:nth-child(4) { animation-delay: 0.18s; }
+.stagger > *:nth-child(5) { animation-delay: 0.23s; }
+.stagger > *:nth-child(6) { animation-delay: 0.28s; }
+.stagger > *:nth-child(7) { animation-delay: 0.33s; }
+.stagger > *:nth-child(8) { animation-delay: 0.38s; }
+.stagger > *:nth-child(n+9) { animation-delay: 0.43s; }
+
+/* 隐藏滚动条但保留滚动 */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* 书架封面纸感纹理 */
+.cover-texture {
+  background-image:
+    linear-gradient(135deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0) 45%),
+    radial-gradient(circle at 80% 110%, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0) 55%);
+}
+
+/* ══ 双色盒子 · Catppuccin Mocha 观感移植 ══
+   紫底 + 抹茶绿/香芋紫双点缀 · 标题阶梯 · 渐变分隔线 · Crust 代码块 */
+.theme-boxmocha .reader-content {
+  letter-spacing: 0.012em;
+  -webkit-font-smoothing: antialiased;
+}
+.theme-boxmocha ::selection {
+  color: #cdd6f4;
+  background: color-mix(in srgb, #a6e3a1 30%, transparent);
+}
+.theme-boxmocha .reader-content em {
+  color: #a6e3a1;
+}
+.theme-boxmocha .reader-content strong {
+  color: #cba6f7;
+}
+.theme-boxmocha .reader-content blockquote {
+  border-left: 3px solid color-mix(in srgb, #a6e3a1 55%, transparent);
+  border-radius: 0 10px 10px 0;
+  padding: 0.5em 0.9em;
+  background: color-mix(in srgb, #a6e3a1 5%, transparent);
+  color: color-mix(in srgb, #a6e3a1 80%, #cdd6f4);
+  opacity: 1;
+}
+/* 标题阶梯：渐变下划线由长到短 */
+.theme-boxmocha .reader-content h1,
+.theme-boxmocha .reader-content h2,
+.theme-boxmocha .reader-content h3 {
+  position: relative;
+  color: #cdd6f4;
+  padding-bottom: 0.45em;
+}
+.theme-boxmocha .reader-content h1::after,
+.theme-boxmocha .reader-content h2::after,
+.theme-boxmocha .reader-content h3::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(120deg, #a6e3a1, #cba6f7);
+}
+.theme-boxmocha .reader-content h1::after { width: 100%; }
+.theme-boxmocha .reader-content h2::after { width: 46%; }
+.theme-boxmocha .reader-content h3::after { width: 22%; height: 2px; }
+.theme-boxmocha .reader-content h3 {
+  color: #cba6f7;
+}
+/* 渐变分隔线 */
+.theme-boxmocha .reader-content hr {
+  margin: 2.2em 0;
+}
+.theme-boxmocha .reader-content hr::after {
+  content: none;
+}
+.theme-boxmocha .reader-content hr {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #a6e3a1 30%, #cba6f7 70%, transparent);
+}
+/* Crust 代码块 + 中文等宽回退 */
+.theme-boxmocha .reader-content code {
+  font-family: "JetBrains Mono", "Cascadia Code", Consolas, "Noto Sans Mono CJK SC", "Noto Sans SC", monospace;
+}
+.theme-boxmocha .reader-content :not(pre) > code {
+  background: #11111b;
+  color: #a6e3a1;
+  padding: 0.15em 0.45em;
+  border-radius: 6px;
+  font-size: 0.88em;
+}
+.theme-boxmocha .reader-content pre {
+  background: #11111b;
+  border-radius: 12px;
+  padding: 1em 1.2em;
+  overflow-x: auto;
+  line-height: 1.6;
+}
+.theme-boxmocha .reader-content pre code {
+  color: #cdd6f4;
+}
+/* 图片圆角 */
+.theme-boxmocha .reader-content img {
+  border-radius: 12px;
+}
