@@ -24,6 +24,7 @@ export interface ReaderSettings {
   followSystem: boolean; // 跟随系统深浅色
   dayTheme: string; // 日间主题 id
   nightTheme: string; // 夜间主题 id
+  moodStyling: boolean; // 氛围渲染（气声/独白/拟声自动识别）
 }
 
 export const DEFAULT_SETTINGS: ReaderSettings = {
@@ -51,6 +52,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   followSystem: false,
   dayTheme: "paper",
   nightTheme: "night",
+  moodStyling: true,
 };
 
 export interface ThemePreset {

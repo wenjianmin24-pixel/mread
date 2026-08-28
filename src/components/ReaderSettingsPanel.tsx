@@ -227,6 +227,13 @@ export default function ReaderSettingsPanel({
           {settings.dialogueEnabled && (
             <>
               <div className="flex items-center justify-between">
+                <span className="text-xs opacity-70">
+                  氛围渲染
+                  <span className="ml-1 text-[10px] opacity-60">气声·独白·拟声</span>
+                </span>
+                <Toggle on={settings.moodStyling} onClick={() => set("moodStyling", !settings.moodStyling)} />
+              </div>
+              <div className="flex items-center justify-between">
                 <span className="text-xs opacity-70">多彩轮换（不同对白不同色）</span>
                 <Toggle on={settings.dialogueRainbow} onClick={() => set("dialogueRainbow", !settings.dialogueRainbow)} />
               </div>
@@ -291,6 +298,19 @@ export default function ReaderSettingsPanel({
                   </>
                 )}
               </p>
+              {settings.moodStyling && (
+                <div className="space-y-1.5 rounded-xl bg-black/5 p-3 text-[13px] leading-relaxed opacity-80">
+                  <p className="!m-0 italic opacity-60">
+                    气声：「……嗯、别、别在这里……」
+                  </p>
+                  <p className="!m-0 italic" style={{ color: "inherit", opacity: 0.72, paddingLeft: "1.2em", borderLeft: "2px solid rgba(128,128,128,0.25)" }}>
+                    独白：他不会发现吧……这样想着，指尖却在颤抖。
+                  </p>
+                  <p className="!m-0 italic opacity-50 tracking-[0.18em]">
+                    拟声：嗯……啊……呜……
+                  </p>
+                </div>
+              )}
             </>
           )}
         </div>

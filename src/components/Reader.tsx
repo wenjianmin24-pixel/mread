@@ -270,7 +270,11 @@ export default function Reader({ bookId }: { bookId: number }) {
     if (!el || !html) return;
     el.innerHTML = html;
     if (settings.dialogueEnabled) {
-      highlightDialogue(el, { rainbow: settings.dialogueRainbow, bold: settings.dialogueBold });
+      highlightDialogue(el, {
+        rainbow: settings.dialogueRainbow,
+        bold: settings.dialogueBold,
+        mood: settings.moodStyling,
+      });
     }
     // 恢复滚动位置
     const r = restoreRef.current;
@@ -282,7 +286,7 @@ export default function Reader({ bookId }: { bookId: number }) {
     }
     measure();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [html, settings.dialogueEnabled, settings.dialogueRainbow, settings.dialogueBold, settings.fontSize, settings.lineHeight, settings.letterSpacing, settings.paragraphSpacing, settings.sidePadding, settings.pageMode, settings.firstLineIndent, settings.fontFamily]);
+  }, [html, settings.dialogueEnabled, settings.dialogueRainbow, settings.dialogueBold, settings.moodStyling, settings.fontSize, settings.lineHeight, settings.letterSpacing, settings.paragraphSpacing, settings.sidePadding, settings.pageMode, settings.firstLineIndent, settings.fontFamily]);
 
   /* ---------- 分页模式列宽 ---------- */
   useLayoutEffect(() => {

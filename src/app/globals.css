@@ -101,6 +101,36 @@ body {
 .dlg-c4 { color: var(--dlg-c4); }
 .dlg-c5 { color: var(--dlg-c5); }
 
+/* ===== 氛围渲染 ===== */
+/* 气声：淡化的引号对白 */
+.dlg-soft {
+  color: var(--dlg-color, inherit);
+  opacity: 0.62;
+  font-style: italic;
+  transition: opacity 0.25s ease;
+}
+.dlg-soft.dlg-bold {
+  font-weight: 500;
+}
+/* 心理独白：整段斜体 → 次级色 + 轻微右缩进 */
+p.thought {
+  color: color-mix(in srgb, currentColor 72%, transparent);
+  font-style: italic;
+  padding-left: 1.2em;
+  border-left: 2px solid color-mix(in srgb, currentColor 18%, transparent);
+}
+/* 拟声段落：虚化弱化，近乎耳语背景 */
+p.gasp {
+  opacity: 0.5;
+  letter-spacing: 0.18em;
+  filter: blur(0.2px);
+  font-style: italic;
+}
+/* 暗色主题下气声用主题色而非继承，保证可读 */
+.dark-scope .dlg-soft {
+  opacity: 0.7;
+}
+
 /* ===== 横向分页模式 ===== */
 .paged-viewport {
   overflow-x: auto;
