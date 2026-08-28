@@ -16,7 +16,7 @@ import {
   Info,
   LibraryBig,
 } from "lucide-react";
-import { DEFAULT_SETTINGS, type ReaderSettings } from "@/lib/types";
+import { DEFAULT_SETTINGS, FONT_STACKS, type ReaderSettings } from "@/lib/types";
 
 interface FontMeta {
   id: number;
@@ -58,6 +58,11 @@ export default function SettingsPage({ initialFonts }: { initialFonts: FontMeta[
       }).catch(() => {});
     }, 500);
   }
+
+  // 封面书名跟随正文字体
+  const titleFont = shelfSettings.fontFamily.startsWith("custom:")
+    ? `"custom-font-${shelfSettings.fontFamily.split(":")[1]}"`
+    : FONT_STACKS[shelfSettings.fontFamily] ?? FONT_STACKS.serif;
 
   const showToast = (m: string) => {
     setToast(m);
@@ -209,9 +214,10 @@ export default function SettingsPage({ initialFonts }: { initialFonts: FontMeta[
               </span>
               <div>
                 <p
-                  className="font-serif font-bold leading-snug text-white/95"
+                  className="font-bold leading-snug text-white/95"
                   style={{
                     fontSize: shelfSettings.coverTitleSize,
+                    fontFamily: titleFont,
                     display: "-webkit-box",
                     WebkitLineClamp: shelfSettings.coverTitleSize >= 18 ? 2 : 3,
                     WebkitBoxOrient: "vertical",

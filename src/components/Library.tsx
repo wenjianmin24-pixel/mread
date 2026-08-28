@@ -15,14 +15,24 @@ import {
   PenLine,
   Check,
 } from "lucide-react";
-import type { BookMeta } from "@/lib/types";
+import { FONT_STACKS, type BookMeta } from "@/lib/types";
 
 function fmtWords(n: number) {
   return n >= 10000 ? `${(n / 10000).toFixed(1)} 万字` : `${n} 字`;
 }
 
 /** 书籍封面：由色相派生的渐变 + 排版 */
-function Cover({ book, large, titleSize = 15 }: { book: BookMeta; large?: boolean; titleSize?: number }) {
+function Cover({
+  book,
+  large,
+  titleSize = 15,
+  titleFont,
+}: {
+  book: BookMeta;
+  large?: boolean;
+  titleSize?: number;
+  titleFont?: string;
+}) {
   const h = book.coverHue;
   return (
     <div
@@ -43,9 +53,10 @@ function Cover({ book, large, titleSize = 15 }: { book: BookMeta; large?: boolea
       </div>
       <div>
         <h3
-          className={`font-serif font-bold leading-snug text-white/95 ${large ? "text-lg" : ""}`}
+          className={`font-bold leading-snug text-white/95 ${large ? "text-lg" : ""}`}
           style={{
             fontSize: large ? undefined : titleSize,
+            fontFamily: titleFont,
             display: "-webkit-box",
             WebkitLineClamp: titleSize >= 18 ? 2 : 3,
             WebkitBoxOrient: "vertical",
@@ -76,6 +87,7 @@ export default function Library({ initialBooks }: { initialBooks: BookMeta[] }) 
   const [toast, setToast] = useState("");
   const [merging, setMerging] = useState(false);
   const [coverTitleSize, setCoverTitleSize] = useState(15);
+  const [titleFont, setTitleFont] = useState<string>(FONT_STACKS.serif);
 
   // 编辑书名/作者
   const [editing, setEditing] = useState(false);
@@ -83,16 +95,39 @@ export default function Library({ initialBooks }: { initialBooks: BookMeta[] }) 
   const [editAuthor, setEditAuthor] = useState("");
   const [savingMeta, setSavingMeta] = useState(false);
 
-  // 读取书架设置（封面字号）
+  // 读取书架设置（封面字号 + 标题字体跟随正文字体），必要时注入自定义字体
   useEffect(() => {
-    fetch("/api/settings")
-      .then((r) => r.json())
-      .then((d) => {
-        if (typeof d.settings?.coverTitleSize === "number") {
-          setCoverTitleSize(d.settings.coverTitleSize);
+    (async () => {
+      try {
+        const [setRes, fontRes] = await Promise.all([
+          fetch("/api/settings").then((r) => r.json()),
+          fetch("/api/fonts").then((r) => r.json()),
+        ]);
+        const s = setRes.settings ?? {};
+        if (typeof s.coverTitleSize === "number") setCoverTitleSize(s.coverTitleSize);
+
+        const fonts = (fontRes.fonts ?? []) as { id: number }[];
+        if (fonts.length) {
+          const style = document.createElement("style");
+          style.textContent = fonts
+            .map(
+              (f) =>
+                `@font-face{font-family:"custom-font-${f.id}";src:url("/api/fonts/${f.id}/file");font-display:swap;}`
+            )
+            .join("\n");
+          document.head.appendChild(style);
         }
-      })
-      .catch(() => {});
+
+        const fam: string = s.fontFamily ?? "serif";
+        setTitleFont(
+          fam.startsWith("custom:")
+            ? `"custom-font-${fam.split(":")[1]}"`
+            : FONT_STACKS[fam] ?? FONT_STACKS.serif
+        );
+      } catch {
+        /* 忽略 */
+      }
+    })();
   }, []);
 
   const showToast = (msg: string) => {
@@ -211,7 +246,7 @@ export default function Library({ initialBooks }: { initialBooks: BookMeta[] }) 
       <header className="anim-fade-up flex items-end justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="font-serif text-3xl font-bold tracking-wide text-[#f0e9dc]">墨阅</h1>
+            <h1 className="text-3xl font-bold tracking-wide text-[#f0e9dc]" style={{ fontFamily: titleFont }}>墨阅</h1>
             <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium tracking-widest text-amber-300">
               MREAD
             </span>
@@ -244,7 +279,7 @@ export default function Library({ initialBooks }: { initialBooks: BookMeta[] }) 
                 }}
                 className="block w-full text-left transition duration-300 active:scale-95"
               >
-                <Cover book={b} titleSize={coverTitleSize} />
+                <Cover book={b} titleSize={coverTitleSize} titleFont={titleFont} />
                 <div className="mt-2 flex items-center justify-between px-0.5">
                   <span className="truncate text-[11px] text-zinc-500">
                     {b.chapterCount} 章 · {fmtWords(b.wordCount)}
@@ -277,7 +312,7 @@ export default function Library({ initialBooks }: { initialBooks: BookMeta[] }) 
           <div className="flex h-24 w-24 items-center justify-center rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-800 to-zinc-900 shadow-2xl">
             <BookOpen size={36} className="text-amber-400/80" />
           </div>
-          <h2 className="mt-6 font-serif text-xl font-bold text-zinc-200">书架还空着</h2>
+          <h2 className="mt-6 text-xl font-bold text-zinc-200" style={{ fontFamily: titleFont }}>书架还空着</h2>
           <p className="mt-2 max-w-[260px] text-sm leading-relaxed text-zinc-500">
             导入你的 Markdown / TXT 小说，或先试试内置示例书体验完整功能
           </p>
@@ -327,7 +362,7 @@ export default function Library({ initialBooks }: { initialBooks: BookMeta[] }) 
               /* ===== 编辑表单 ===== */
               <div className="mb-4 space-y-3">
               <div className="mb-1 flex items-center justify-between">
-                  <h3 className="font-serif font-bold text-zinc-100">编辑书籍信息</h3>
+                  <h3 className="font-bold text-zinc-100" style={{ fontFamily: titleFont }}>编辑书籍信息</h3>
                   <button
                     onClick={() => setEditing(false)}
                     className="rounded-full p-1.5 text-zinc-500 active:bg-white/10"
@@ -370,10 +405,10 @@ export default function Library({ initialBooks }: { initialBooks: BookMeta[] }) 
               /* ===== 信息头 ===== */
               <div className="mb-4 flex items-start gap-3">
                 <div className="w-12 shrink-0">
-                  <Cover book={managed} titleSize={11} />
+                  <Cover book={managed} titleSize={11} titleFont={titleFont} />
                 </div>
                 <div className="min-w-0 flex-1 pt-1">
-                  <h3 className="truncate font-serif font-bold text-zinc-100">{managed.title}</h3>
+                  <h3 className="truncate font-bold text-zinc-100" style={{ fontFamily: titleFont }}>{managed.title}</h3>
                   <p className="mt-0.5 text-xs text-zinc-500">
                     {managed.author} · {managed.chapterCount} 章 · {fmtWords(managed.wordCount)}
                   </p>
