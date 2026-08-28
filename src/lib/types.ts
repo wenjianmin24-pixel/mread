@@ -19,6 +19,11 @@ export interface ReaderSettings {
   keepAwake: boolean; // 屏幕常亮
   showFooter: boolean; // 底部进度显示
   coverTitleSize: number; // 书架封面书名字号 px
+  autoScrollSpeed: number; // 自动滚屏速度 px/s
+  contentWidth: number; // 页宽 70~100 (%)
+  followSystem: boolean; // 跟随系统深浅色
+  dayTheme: string; // 日间主题 id
+  nightTheme: string; // 夜间主题 id
 }
 
 export const DEFAULT_SETTINGS: ReaderSettings = {
@@ -41,6 +46,11 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   keepAwake: false,
   showFooter: true,
   coverTitleSize: 15,
+  autoScrollSpeed: 60,
+  contentWidth: 100,
+  followSystem: false,
+  dayTheme: "paper",
+  nightTheme: "night",
 };
 
 export interface ThemePreset {

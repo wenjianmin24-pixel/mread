@@ -71,6 +71,21 @@ body {
   opacity: 0.5;
 }
 
+/* ===== 章头书感排版 ===== */
+.chapter-head .ch-deco {
+  display: inline-block;
+  width: 3.5rem;
+  height: 1px;
+  opacity: 0.45;
+}
+.chapter-enter {
+  animation: chapterIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes chapterIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+
 /* ===== 对话高亮 ===== */
 .dlg {
   color: var(--dlg-color, inherit);

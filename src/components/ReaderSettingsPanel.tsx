@@ -199,6 +199,17 @@ export default function ReaderSettingsPanel({
             display={`${settings.sidePadding}px`}
             onChange={(v) => set("sidePadding", v)}
           />
+          <div style={settings.pageMode === "paged" ? { opacity: 0.35, pointerEvents: "none" } : undefined}>
+            <Slider
+              label="页宽（仅滚动模式）"
+              value={settings.contentWidth}
+              min={70}
+              max={100}
+              step={5}
+              display={`${settings.contentWidth}%`}
+              onChange={(v) => set("contentWidth", v)}
+            />
+          </div>
           <div className="flex items-center justify-between pt-1">
             <span className="text-xs opacity-70">首行缩进两字符</span>
             <Toggle on={settings.firstLineIndent} onClick={() => set("firstLineIndent", !settings.firstLineIndent)} />
@@ -287,60 +298,111 @@ export default function ReaderSettingsPanel({
 
       {/* 主题 */}
       <Section icon={Palette} title="主题配色">
-        {([
-          { label: "亮色", dark: false },
-          { label: "暗色 · 夜间护眼", dark: true },
-        ] as const).map((group) => (
-          <div key={group.label}>
-            <p className="mb-1.5 mt-1 text-[10px] tracking-widest opacity-45">{group.label}</p>
-            <div className="grid grid-cols-4 gap-2">
-              {THEME_PRESETS.filter((t) => t.dark === group.dark).map((t) => {
-                const active = settings.theme === t.id;
-                const bg = t.id === "custom" ? settings.customBg : t.bg;
-                const fg = t.id === "custom" ? settings.customFg : t.fg;
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() =>
-                      t.id === "boxmocha"
-                        ? onChange({
-                            ...settings,
-                            theme: t.id,
-                            dialogueColor: "#a6e3a1",
-                            fontFamily: "system",
-                            lineHeight: 1.8,
-                            paragraphSpacing: 0.6,
-                            firstLineIndent: false,
-                            letterSpacing: 0,
-                          })
-                        : set("theme", t.id)
-                    }
-                    className={`relative overflow-hidden rounded-xl border-2 py-2 transition active:scale-95 ${
-                      active ? "border-current" : "border-transparent"
-                    }`}
-                    style={{ background: bg }}
-                  >
-                    <span className="block text-center text-lg leading-none" style={{ color: fg }}>
-                      文
-                    </span>
-                    <span className="mt-1 block text-center text-[10px]" style={{ color: fg, opacity: 0.7 }}>
-                      {t.name}
-                    </span>
-                    {active && (
-                      <span className="absolute right-1 top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full" style={{ background: fg }}>
-                        <Check size={9} style={{ color: bg }} />
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+        <div className="mb-3 flex items-center justify-between rounded-2xl border border-black/8 bg-black/[0.03] px-4 py-3">
+          <span className="text-xs opacity-70">跟随系统深浅色自动切换</span>
+          <Toggle
+            on={settings.followSystem}
+            onClick={() => set("followSystem", !settings.followSystem)}
+          />
+        </div>
+        {settings.followSystem ? (
+          <div className="space-y-3.5">
+            {(
+              [
+                { key: "dayTheme", label: "日间主题", dark: false },
+                { key: "nightTheme", label: "夜间主题", dark: true },
+              ] as const
+            ).map((grp) => (
+              <div key={grp.key}>
+                <p className="mb-1.5 flex items-center justify-between text-[10px] tracking-widest opacity-45">
+                  <span>{grp.label}</span>
+                  <span className="tracking-normal opacity-80">
+                    {THEME_PRESETS.find((t) => t.id === settings[grp.key])?.name ?? "—"}
+                  </span>
+                </p>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {THEME_PRESETS.filter((t) => t.dark === grp.dark && t.id !== "custom").map((t) => {
+                    const active = settings[grp.key] === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        onClick={() => set(grp.key, t.id)}
+                        className={`relative rounded-lg border-2 py-1.5 transition active:scale-95 ${
+                          active ? "border-current" : "border-transparent"
+                        }`}
+                        style={{ background: t.bg }}
+                      >
+                        <span className="block text-center text-[11px] leading-none" style={{ color: t.fg }}>
+                          文
+                        </span>
+                        {active && (
+                          <Check size={9} className="absolute right-0.5 top-0.5" style={{ color: t.fg }} />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-        {settings.theme === "custom" && (
-          <div className="mt-3 flex items-center gap-5 rounded-2xl border border-black/8 bg-black/[0.03] p-4">
-            <ColorField label="背景色" value={settings.customBg} onChange={(v) => set("customBg", v)} />
-            <ColorField label="文字色" value={settings.customFg} onChange={(v) => set("customFg", v)} />
+        ) : (
+          <div className="space-y-3.5">
+            {([
+              { label: "亮色", dark: false },
+              { label: "暗色 · 夜间护眼", dark: true },
+            ] as const).map((group) => (
+              <div key={group.label}>
+                <p className="mb-1.5 mt-1 text-[10px] tracking-widest opacity-45">{group.label}</p>
+                <div className="grid grid-cols-4 gap-2">
+                  {THEME_PRESETS.filter((t) => t.dark === group.dark).map((t) => {
+                    const active = settings.theme === t.id;
+                    const bg = t.id === "custom" ? settings.customBg : t.bg;
+                    const fg = t.id === "custom" ? settings.customFg : t.fg;
+                    return (
+                      <button
+                        key={t.id}
+                        onClick={() =>
+                          t.id === "boxmocha"
+                            ? onChange({
+                                ...settings,
+                                theme: t.id,
+                                dialogueColor: "#a6e3a1",
+                                fontFamily: "system",
+                                lineHeight: 1.8,
+                                paragraphSpacing: 0.6,
+                                firstLineIndent: false,
+                                letterSpacing: 0,
+                              })
+                            : set("theme", t.id)
+                        }
+                        className={`relative overflow-hidden rounded-xl border-2 py-2 transition active:scale-95 ${
+                          active ? "border-current" : "border-transparent"
+                        }`}
+                        style={{ background: bg }}
+                      >
+                        <span className="block text-center text-lg leading-none" style={{ color: fg }}>
+                          文
+                        </span>
+                        <span className="mt-1 block text-center text-[10px]" style={{ color: fg, opacity: 0.7 }}>
+                          {t.name}
+                        </span>
+                        {active && (
+                          <span className="absolute right-1 top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full" style={{ background: fg }}>
+                            <Check size={9} style={{ color: bg }} />
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            {settings.theme === "custom" && (
+              <div className="mt-3 flex items-center gap-5 rounded-2xl border border-black/8 bg-black/[0.03] p-4">
+                <ColorField label="背景色" value={settings.customBg} onChange={(v) => set("customBg", v)} />
+                <ColorField label="文字色" value={settings.customFg} onChange={(v) => set("customFg", v)} />
+              </div>
+            )}
           </div>
         )}
       </Section>
@@ -375,6 +437,20 @@ export default function ReaderSettingsPanel({
             display={`${Math.round(settings.brightness * 100)}%`}
             onChange={(v) => set("brightness", v)}
           />
+          <div style={settings.pageMode === "paged" ? { opacity: 0.35, pointerEvents: "none" } : undefined}>
+            <Slider
+              label="自动滚屏速度"
+              value={settings.autoScrollSpeed}
+              min={20}
+              max={200}
+              step={10}
+              display={`${settings.autoScrollSpeed}px/s`}
+              onChange={(v) => set("autoScrollSpeed", v)}
+            />
+            <p className="mt-1.5 text-[10px] opacity-45">
+              点底部工具栏 ▶ 启动；滚动中触碰屏幕即暂停
+            </p>
+          </div>
           <div className="flex items-center justify-between">
             <span className="text-xs opacity-70">屏幕常亮</span>
             <Toggle on={settings.keepAwake} onClick={() => set("keepAwake", !settings.keepAwake)} />

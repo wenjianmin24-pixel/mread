@@ -11,6 +11,8 @@ import {
   List,
   Loader2,
   MoonStar,
+  Pause,
+  Play,
   Type as TypeIcon,
 } from "lucide-react";
 import { highlightDialogue } from "@/lib/dialogue";
@@ -30,6 +32,71 @@ interface BookData {
   id: number;
   title: string;
   format: string;
+}
+
+/** 拆分章节标题："第十二章 雨夜来客" → { no: "第十二章", rest: "雨夜来客" } */
+function splitChapterTitle(title: string): { no: string | null; rest: string } {
+  const m = title.match(/^(第[0-9零一二三四五六七八九十百千万两]+[章节卷回部集篇])(（\d+\/\d+）)?[ \u3000]*(.*)$/);
+  if (m) {
+    const noWithPart = m[2] ? `${m[1]} ${m[2]}` : m[1];
+    if (m[4]) return { no: noWithPart, rest: m[4] };
+    return { no: null, rest: noWithPart };
+  }
+  const c = title.match(/^(Chapter\s+\d+)(（\d+\/\d+）)?[:.\s\u3000]*(.*)$/i);
+  if (c) {
+    const noWithPart = c[2] ? `${c[1]} ${c[2]}` : c[1];
+    if (c[3]) return { no: noWithPart, rest: c[3] };
+    return { no: null, rest: noWithPart };
+  }
+  return { no: null, rest: title };
+}
+
+/** 书感章头：章节号小字 + 装饰线 + 标题大字，章首淡入 */
+function ChapterHead({
+  title,
+  fontFamily,
+  fontSize,
+  sub,
+}: {
+  title: string;
+  fontFamily: string;
+  fontSize: number;
+  sub: string;
+}) {
+  const { no, rest } = splitChapterTitle(title);
+  return (
+    <div className="chapter-head chapter-enter mb-10 text-center">
+      {no ? (
+        <>
+          <p
+            className="mb-1.5 tracking-[0.45em]"
+            style={{ color: sub, fontFamily, fontSize: Math.max(11, Math.round(fontSize * 0.62)) }}
+          >
+            {no}
+          </p>
+          <span className="ch-deco" style={{ background: `linear-gradient(90deg, transparent, ${sub}, transparent)` }} />
+          <h1
+            className="mt-4 font-bold"
+            style={{ fontSize: Math.round(fontSize * 1.32), fontFamily, lineHeight: 1.5 }}
+          >
+            {rest}
+          </h1>
+        </>
+      ) : (
+        <>
+          <p className="mb-2.5" style={{ color: sub, fontFamily, fontSize: 9 }}>
+            ◆
+          </p>
+          <h1
+            className="font-bold"
+            style={{ fontSize: Math.round(fontSize * 1.32), fontFamily, lineHeight: 1.5 }}
+          >
+            {rest}
+          </h1>
+        </>
+      )}
+    </div>
+  );
 }
 
 function escapeHtml(s: string) {
@@ -75,9 +142,12 @@ export default function Reader({ bookId }: { bookId: number }) {
   const [chapterLoading, setChapterLoading] = useState(false);
   const [progressInfo, setProgressInfo] = useState({ ratio: 0, page: 1, pages: 1 });
   const [markedBook, setMarkedBook] = useState(false);
+  const [autoScrollOn, setAutoScrollOn] = useState(false);
+  const [systemDark, setSystemDark] = useState(false);
 
   const contentRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null); // paged 模式滚动容器
+  const scrollRef = useRef<HTMLDivElement>(null); // scroll 模式滚动容器
   const restoreRef = useRef<{ ratio: number | null; pending: boolean }>({ ratio: null, pending: false });
   const initProgRef = useRef<{ chapterId: number; scrollRatio: number } | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -90,10 +160,25 @@ export default function Reader({ bookId }: { bookId: number }) {
   currentIdRef.current = currentId;
   pagedRef.current = settings.pageMode === "paged";
 
+  /* ---------- 跟随系统深浅色 ---------- */
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const update = () => setSystemDark(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  const effectiveThemeId = settings.followSystem
+    ? systemDark
+      ? settings.nightTheme
+      : settings.dayTheme
+    : settings.theme;
+
   const theme =
-    THEME_PRESETS.find((t) => t.id === settings.theme) ?? THEME_PRESETS[0];
-  const bg = settings.theme === "custom" ? settings.customBg : theme.bg;
-  const fg = settings.theme === "custom" ? settings.customFg : theme.fg;
+    THEME_PRESETS.find((t) => t.id === effectiveThemeId) ?? THEME_PRESETS[0];
+  const bg = theme.id === "custom" ? settings.customBg : theme.bg;
+  const fg = theme.id === "custom" ? settings.customFg : theme.fg;
   const sub = theme.sub;
   const ui = theme.ui;
 
@@ -264,8 +349,10 @@ export default function Reader({ bookId }: { bookId: number }) {
       const max = vp.scrollWidth - vp.clientWidth;
       vp.scrollLeft = ratio * Math.max(max, 0);
     } else {
-      const max = document.documentElement.scrollHeight - window.innerHeight;
-      window.scrollTo({ top: ratio * Math.max(max, 0) });
+      const el = scrollRef.current;
+      if (!el) return;
+      const max = el.scrollHeight - el.clientHeight;
+      el.scrollTop = ratio * Math.max(max, 0);
     }
   }, []);
 
@@ -283,14 +370,17 @@ export default function Reader({ bookId }: { bookId: number }) {
         page = Math.min(pages, Math.round(vp.scrollLeft / cw) + 1);
       }
     } else {
-      const max = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1);
-      ratio = Math.min(1, Math.max(0, window.scrollY / max));
-      const el = contentRef.current;
+      const el = scrollRef.current;
       if (el) {
-        const textLen = el.innerText.length || 1;
-        const per = Math.max(1, Math.round(textLen / 900));
-        pages = per;
-        page = Math.min(per, Math.floor(ratio * per) + 1);
+        const max = Math.max(el.scrollHeight - el.clientHeight, 1);
+        ratio = Math.min(1, Math.max(0, el.scrollTop / max));
+        const content = contentRef.current;
+        if (content) {
+          const textLen = content.innerText.length || 1;
+          const per = Math.max(1, Math.round(textLen / 900));
+          pages = per;
+          page = Math.min(per, Math.floor(ratio * per) + 1);
+        }
       }
     }
     ratioRef.current = ratio;
@@ -312,7 +402,9 @@ export default function Reader({ bookId }: { bookId: number }) {
   useEffect(() => {
     if (loading) return;
     const target: (Window | HTMLElement) =
-      settings.pageMode === "paged" && viewportRef.current ? viewportRef.current : window;
+      settings.pageMode === "paged" && viewportRef.current
+        ? viewportRef.current
+        : (scrollRef.current ?? window);
     let ticking = false;
     const onScroll = () => {
       if (ticking) return;
@@ -325,6 +417,31 @@ export default function Reader({ bookId }: { bookId: number }) {
     target.addEventListener("scroll", onScroll, { passive: true });
     return () => target.removeEventListener("scroll", onScroll);
   }, [loading, settings.pageMode, measure, html]);
+
+  /* ---------- 自动滚屏 ---------- */
+  useEffect(() => {
+    if (settings.pageMode !== "scroll") setAutoScrollOn(false);
+  }, [settings.pageMode]);
+
+  useEffect(() => {
+    if (!autoScrollOn || settings.pageMode !== "scroll") return;
+    const el = scrollRef.current;
+    if (!el) return;
+    let raf = 0;
+    let last = performance.now();
+    const step = (ts: number) => {
+      const dt = ts - last;
+      last = ts;
+      el.scrollTop += (settings.autoScrollSpeed * dt) / 1000;
+      if (el.scrollTop >= el.scrollHeight - el.clientHeight - 1) {
+        setAutoScrollOn(false);
+        return;
+      }
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [autoScrollOn, settings.autoScrollSpeed, settings.pageMode, currentId]);
 
   /* ---------- 导航 ---------- */
   const currentIdx = chapters.findIndex((c) => c.id === currentId);
@@ -350,12 +467,13 @@ export default function Reader({ bookId }: { bookId: number }) {
         vp.scrollBy({ left: vp.clientWidth, behavior: "smooth" });
       }
     } else {
-      const nearBottom =
-        window.scrollY >= document.documentElement.scrollHeight - window.innerHeight - 8;
+      const el = scrollRef.current;
+      if (!el) return;
+      const nearBottom = el.scrollTop >= el.scrollHeight - el.clientHeight - 8;
       if (nearBottom) {
         if (currentIdx < chapters.length - 1) goChapter(chapters[currentIdx + 1].id);
       } else {
-        window.scrollBy({ top: window.innerHeight * 0.92, behavior: "smooth" });
+        el.scrollBy({ top: el.clientHeight * 0.92, behavior: "smooth" });
       }
     }
   }, [chapters, currentIdx, goChapter]);
@@ -370,15 +488,21 @@ export default function Reader({ bookId }: { bookId: number }) {
         vp.scrollBy({ left: -vp.clientWidth, behavior: "smooth" });
       }
     } else {
-      if (window.scrollY <= 8) {
+      const el = scrollRef.current;
+      if (!el) return;
+      if (el.scrollTop <= 8) {
         if (currentIdx > 0) goChapter(chapters[currentIdx - 1].id);
       } else {
-        window.scrollBy({ top: -window.innerHeight * 0.92, behavior: "smooth" });
+        el.scrollBy({ top: -el.clientHeight * 0.92, behavior: "smooth" });
       }
     }
   }, [chapters, currentIdx, goChapter]);
 
   const onTapZone = (e: React.MouseEvent) => {
+    if (autoScrollOn) {
+      setAutoScrollOn(false);
+      return;
+    }
     if (panelOpen || drawerOpen) return;
     const x = e.clientX / window.innerWidth;
     if (x < 0.28) prevPage();
@@ -451,13 +575,24 @@ export default function Reader({ bookId }: { bookId: number }) {
       {/* ===== 内容区 ===== */}
       {settings.pageMode === "scroll" ? (
         <div
+          ref={scrollRef}
           className="h-full overflow-y-auto no-scrollbar"
           onClick={onTapZone}
+          onTouchStart={() => {
+            if (autoScrollOn) setAutoScrollOn(false);
+          }}
+          onWheel={() => {
+            if (autoScrollOn) setAutoScrollOn(false);
+          }}
           style={{ WebkitOverflowScrolling: "touch" }}
         >
           <div
-            className={`mx-auto min-h-full ${theme.id === "boxmocha" ? "max-w-none" : "max-w-3xl"}`}
+            className="mx-auto min-h-full"
             style={{
+              maxWidth:
+                theme.id === "boxmocha"
+                  ? undefined
+                  : `calc(48rem * ${settings.contentWidth / 100})`,
               paddingLeft: settings.sidePadding,
               paddingRight: settings.sidePadding,
               paddingTop: "max(3.5rem, env(safe-area-inset-top))",
@@ -465,12 +600,12 @@ export default function Reader({ bookId }: { bookId: number }) {
             }}
           >
             {currentChapter && (
-              <h1
-                className="mb-8 text-center font-bold"
-                style={{ fontSize: settings.fontSize * 1.3, fontFamily, lineHeight: 1.5 }}
-              >
-                {currentChapter.title}
-              </h1>
+              <ChapterHead
+                title={currentChapter.title}
+                fontFamily={fontFamily}
+                fontSize={settings.fontSize}
+                sub={sub}
+              />
             )}
             <div
               ref={contentRef}
@@ -592,14 +727,30 @@ export default function Reader({ bookId }: { bookId: number }) {
               <ChevronLeft size={15} />
               上一章
             </button>
-            <button
-              onClick={() => setPanelOpen(true)}
-              className="flex items-center gap-2 rounded-full px-5 py-2.5 text-xs font-semibold shadow-lg transition active:scale-95"
-              style={{ background: fg, color: ui }}
-            >
-              <TypeIcon size={14} />
-              阅读设置
-            </button>
+            <div className="flex items-center gap-2.5">
+              {settings.pageMode === "scroll" && (
+                <button
+                  onClick={() => setAutoScrollOn((v) => !v)}
+                  className="flex h-10 w-10 items-center justify-center rounded-full transition active:scale-95"
+                  style={
+                    autoScrollOn
+                      ? { background: fg, color: ui, boxShadow: "0 4px 14px -4px rgba(0,0,0,0.4)" }
+                      : { background: "rgba(0,0,0,0.08)" }
+                  }
+                  aria-label={autoScrollOn ? "暂停自动滚屏" : "自动滚屏"}
+                >
+                  {autoScrollOn ? <Pause size={15} /> : <Play size={15} className="ml-0.5" />}
+                </button>
+              )}
+              <button
+                onClick={() => setPanelOpen(true)}
+                className="flex items-center gap-2 rounded-full px-5 py-2.5 text-xs font-semibold shadow-lg transition active:scale-95"
+                style={{ background: fg, color: ui }}
+              >
+                <TypeIcon size={14} />
+                阅读设置
+              </button>
+            </div>
             <button
               onClick={() => currentIdx < chapters.length - 1 && goChapter(chapters[currentIdx + 1].id)}
               disabled={currentIdx >= chapters.length - 1}
