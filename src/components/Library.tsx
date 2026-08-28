@@ -6,14 +6,15 @@ import {
   BookOpen,
   FileUp,
   Loader2,
+  PenLine,
   Plus,
   Settings2,
   Sparkles,
   Trash2,
   X,
   Combine,
-  PenLine,
   Check,
+  ClipboardPen,
 } from "lucide-react";
 import { FONT_STACKS, type BookMeta } from "@/lib/types";
 
@@ -94,6 +95,14 @@ export default function Library({ initialBooks }: { initialBooks: BookMeta[] }) 
   const [editTitle, setEditTitle] = useState("");
   const [editAuthor, setEditAuthor] = useState("");
   const [savingMeta, setSavingMeta] = useState(false);
+
+  // 粘贴新建小说
+  const [creating, setCreating] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newAuthor, setNewAuthor] = useState("");
+  const [newText, setNewText] = useState("");
+  const [newFormat, setNewFormat] = useState<"md" | "txt">("md");
+  const [creatingBusy, setCreatingBusy] = useState(false);
 
   // 读取书架设置（封面字号 + 标题字体跟随正文字体），必要时注入自定义字体
   useEffect(() => {
@@ -237,6 +246,48 @@ export default function Library({ initialBooks }: { initialBooks: BookMeta[] }) 
     }
   }
 
+  function openCreate() {
+    setCreating(true);
+    setNewTitle("");
+    setNewAuthor("");
+    setNewText("");
+    setNewFormat("md");
+  }
+
+  async function createFromText() {
+    const text = newText.trim();
+    if (!text) {
+      showToast("正文不能为空");
+      return;
+    }
+    const title = newTitle.trim() || "未命名书籍";
+    setCreatingBusy(true);
+    try {
+      // 包装成 File 走现有导入管线（章节解析/字数统计/封面全复用）
+      const file = new File([text], `${title}.${newFormat}`, {
+        type: newFormat === "md" ? "text/markdown" : "text/plain",
+      });
+      const form = new FormData();
+      form.append("file", file);
+      form.append("title", title);
+      const author = newAuthor.trim();
+      if (author) form.append("author", author);
+      const res = await fetch("/api/books", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || "创建失败");
+        return;
+      }
+      setCreating(false);
+      const list = await fetch("/api/books").then((r) => r.json());
+      setBooks(list.books);
+      router.refresh();
+      showToast(`已创建《${data.book.title}》`);
+    } finally {
+      setCreatingBusy(false);
+    }
+  }
+
   const totalWords = books.reduce((s, b) => s + b.wordCount, 0);
   const managed = books.find((b) => b.id === manageId);
 
@@ -296,6 +347,16 @@ export default function Library({ initialBooks }: { initialBooks: BookMeta[] }) 
             </div>
           ))}
 
+          {/* 粘贴新建卡片 */}
+          <button
+            onClick={openCreate}
+            className="flex aspect-[3/4] w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-white/12 bg-white/[0.03] text-zinc-500 transition hover:border-emerald-500/40 hover:text-emerald-300 active:scale-95"
+          >
+            <ClipboardPen size={22} />
+            <span className="text-xs">新建小说</span>
+            <span className="text-[10px] text-zinc-600">粘贴文本</span>
+          </button>
+
           {/* 导入卡片 */}
           <button
             onClick={() => fileRef.current?.click()}
@@ -317,6 +378,14 @@ export default function Library({ initialBooks }: { initialBooks: BookMeta[] }) 
             导入你的 Markdown / TXT 小说，或先试试内置示例书体验完整功能
           </p>
           <div className="mt-8 flex gap-3">
+            <button
+              onClick={openCreate}
+              disabled={importing}
+              className="flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-5 py-2.5 text-sm text-emerald-300 transition active:scale-95"
+            >
+              <ClipboardPen size={16} />
+              新建小说
+            </button>
             <button
               onClick={() => fileRef.current?.click()}
               disabled={importing}
@@ -463,6 +532,108 @@ export default function Library({ initialBooks }: { initialBooks: BookMeta[] }) 
                 </button>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 粘贴新建弹层 */}
+      {creating && (
+        <div
+          className="anim-fade-in fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => !creatingBusy && setCreating(false)}
+        >
+          <div
+            className="anim-sheet flex max-h-[88dvh] w-full max-w-md flex-col rounded-t-3xl border-t border-white/10 bg-zinc-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 pb-2 pt-4">
+              <h3 className="flex items-center gap-2 font-bold text-zinc-100">
+                <ClipboardPen size={16} className="text-emerald-400" />
+                新建小说
+              </h3>
+              <button
+                onClick={() => setCreating(false)}
+                disabled={creatingBusy}
+                className="rounded-full p-1.5 text-zinc-500 active:bg-white/10"
+                aria-label="关闭"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="flex-1 space-y-3 overflow-y-auto px-5 pb-5 no-scrollbar">
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="mb-1 block text-[11px] text-zinc-500">书名</span>
+                  <input
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    maxLength={80}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-emerald-500/50"
+                    placeholder="未命名书籍"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-[11px] text-zinc-500">作者（可选）</span>
+                  <input
+                    value={newAuthor}
+                    onChange={(e) => setNewAuthor(e.target.value)}
+                    maxLength={40}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-emerald-500/50"
+                    placeholder="未知作者"
+                  />
+                </label>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex rounded-xl border border-white/10 bg-white/5 p-1">
+                  {(["md", "txt"] as const).map((f) => (
+                    <button
+                      key={f}
+                      onClick={() => setNewFormat(f)}
+                      className={`rounded-lg px-3 py-1.5 text-xs transition ${
+                        newFormat === f ? "bg-emerald-500/20 font-semibold text-emerald-300" : "text-zinc-500"
+                      }`}
+                    >
+                      {f === "md" ? "MD 标题切章" : "TXT 正则切章"}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-[11px] tabular-nums text-zinc-600">
+                  {newText.length > 0 ? `${newText.length} 字` : ""}
+                </span>
+              </div>
+
+              <label className="block">
+                <span className="mb-1 block text-[11px] text-zinc-500">正文</span>
+                <textarea
+                  value={newText}
+                  onChange={(e) => setNewText(e.target.value)}
+                  rows={10}
+                  className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-3.5 py-3 text-sm leading-relaxed text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-emerald-500/50"
+                  placeholder={
+                    newFormat === "md"
+                      ? "粘贴 Markdown 正文…\n\n用 # 标题分章，例：\n# 第一章 初遇"
+                      : "粘贴纯文本正文…\n\n用「第X章」独立行分章"
+                  }
+                />
+              </label>
+
+              <p className="text-[10px] leading-relaxed text-zinc-600">
+                {newFormat === "md"
+                  ? "按 # / ## 标题切分章节；无标题则整本作为一章"
+                  : "按「第X章 / Chapter N / 楔子」等独立行切分章节；超长章自动分块"}
+              </p>
+
+              <button
+                onClick={createFromText}
+                disabled={creatingBusy || !newText.trim()}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-400 to-emerald-600 py-3 text-sm font-semibold text-black transition active:scale-95 disabled:opacity-40"
+              >
+                {creatingBusy ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+                创建并加入书架
+              </button>
+            </div>
           </div>
         </div>
       )}
