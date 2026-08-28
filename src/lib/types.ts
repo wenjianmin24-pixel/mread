@@ -25,6 +25,9 @@ export interface ReaderSettings {
   dayTheme: string; // 日间主题 id
   nightTheme: string; // 夜间主题 id
   moodStyling: boolean; // 氛围渲染（气声/独白/拟声自动识别）
+  spiceStyle: "subtle" | "honey" | "silk" | "blaze"; // 风味包
+  spiceIntensity: number; // 效果强度 0~100
+  spicePulse: boolean; // 实验性：呼吸动效
 }
 
 export const DEFAULT_SETTINGS: ReaderSettings = {
@@ -53,6 +56,9 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   dayTheme: "paper",
   nightTheme: "night",
   moodStyling: true,
+  spiceStyle: "honey",
+  spiceIntensity: 70,
+  spicePulse: false,
 };
 
 export interface ThemePreset {
@@ -99,6 +105,18 @@ export const DIALOGUE_COLORS = [
   { id: "#8e44ad", name: "紫藤" },
   { id: "#c2185b", name: "茜色" },
   { id: "#0e7c86", name: "青碧" },
+];
+
+/** 风味包预设（三级标记效果） */
+export const SPICE_PRESETS: {
+  id: ReaderSettings["spiceStyle"];
+  name: string;
+  desc: string;
+}[] = [
+  { id: "subtle", name: "含蓄", desc: "仅变色，无光效，混入书架无违和" },
+  { id: "honey", name: "蜜色", desc: "锚点蜜色光晕 · 燃点潮红 · 呢喃气音" },
+  { id: "silk", name: "流光", desc: "锚点丝绸流光 · 燃点潮红 · 呢喃气音" },
+  { id: "blaze", name: "燃情", desc: "蜜色 + 呼吸律动，动静最大" },
 ];
 
 /** 多彩对话轮换色板（对应 CSS 类 dlg-c0 ~ dlg-c5） */

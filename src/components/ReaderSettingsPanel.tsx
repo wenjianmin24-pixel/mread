@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Loader2, Quote, Type as TypeIcon, Palette, Rows3 } from "lucide-react";
+import { Check, Loader2, Quote, Type as TypeIcon, Palette, Rows3, Flame } from "lucide-react";
 import {
   DIALOGUE_COLORS,
   FONT_STACKS,
+  SPICE_PRESETS,
   THEME_PRESETS,
   type ReaderSettings,
 } from "@/lib/types";
@@ -425,6 +426,108 @@ export default function ReaderSettingsPanel({
             )}
           </div>
         )}
+      </Section>
+
+      {/* 风味包 */}
+      <Section icon={Flame} title="风味包 · 三级标记">
+        <div className="space-y-3 rounded-2xl border border-black/8 bg-black/[0.03] p-4">
+          <div className="grid grid-cols-4 gap-2">
+            {SPICE_PRESETS.map((p) => (
+              <button
+                key={p.id}
+                onClick={() =>
+                  onChange({
+                    ...settings,
+                    spiceStyle: p.id,
+                    spicePulse: p.id === "blaze" ? true : settings.spicePulse,
+                  })
+                }
+                className={`rounded-xl border py-2.5 text-center transition active:scale-95 ${
+                  settings.spiceStyle === p.id
+                    ? "border-current font-semibold"
+                    : "border-black/10 opacity-65"
+                }`}
+              >
+                <span
+                  className={`block text-base leading-none ${
+                    p.id === "honey" || p.id === "blaze" ? "spice-demo-anchor" : ""
+                  }`}
+                  style={
+                    p.id === "subtle"
+                      ? { fontWeight: 700, color: "#b3541e" }
+                      : p.id === "silk"
+                      ? {
+                          background: "linear-gradient(110deg,#c25e2e,#f0c280 45%,#c25e2e 70%,#f0c280)",
+                          backgroundSize: "200% 100%",
+                          WebkitBackgroundClip: "text",
+                          backgroundClip: "text",
+                          WebkitTextFillColor: "transparent",
+                          fontWeight: 700,
+                        }
+                      : { fontWeight: 700, color: "#c25e2e" }
+                  }
+                >
+                  文
+                </span>
+                <span className="mt-1 block text-[10px] opacity-70">{p.name}</span>
+              </button>
+            ))}
+          </div>
+
+          <p className="text-[10px] leading-relaxed opacity-45">
+            {SPICE_PRESETS.find((p) => p.id === settings.spiceStyle)?.desc}
+          </p>
+
+          <Slider
+            label="效果强度"
+            value={settings.spiceIntensity}
+            min={10}
+            max={100}
+            step={5}
+            display={`${settings.spiceIntensity}%`}
+            onChange={(v) => set("spiceIntensity", v)}
+          />
+
+          {/* 三级预览 */}
+          <div
+            className={`reader-content rounded-xl bg-black/5 p-3 text-[13px] leading-relaxed spice-${settings.spiceStyle}${
+              settings.spicePulse ? " spice-pulse" : ""
+            }`}
+            style={{ ["--spice-lv" as string]: Math.max(0.1, settings.spiceIntensity / 100) }}
+          >
+            <p className="!m-0">
+              锚点：许多藤蔓编织成吊篮，托住一位
+              <strong>翠绿色头发的萝莉</strong>
+              ，身后是两对
+              <strong>洁白羽翼</strong>
+              ，看起来
+              <em>非常舒适柔软</em>
+              。
+            </p>
+            <p className="!m-0">
+              燃点：她的双眼就像最美丽的<mark className="heat">橙色玛瑙</mark>一样，
+              鼻子和嘴都包覆在<mark className="heat">蓝色丝质面罩</mark>中。
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <span className="text-xs opacity-70">
+              呼吸律动
+              <span className="ml-1 text-[10px] opacity-60">实验性</span>
+            </span>
+            <Toggle
+              on={settings.spicePulse}
+              onClick={() => set("spicePulse", !settings.spicePulse)}
+            />
+          </div>
+
+          <p className="text-[10px] leading-relaxed opacity-45">
+            标记语法：<code className="rounded bg-black/10 px-1">**锚点**</code>{" "}
+            材质/部位 ·{" "}
+            <code className="rounded bg-black/10 px-1">==燃点==</code> 最涩词句 ·{" "}
+            <code className="rounded bg-black/10 px-1">*呢喃*</code> 感受句
+          </p>
+        </div>
       </Section>
 
       {/* 翻页与其他 */}

@@ -86,6 +86,117 @@ body {
   to { opacity: 1; transform: none; }
 }
 
+/* ═══════════ 风味包 · 三级标记效果体系 ═══════════ */
+/*
+ * 三级标记：**加粗**（锚点）/ ==高亮==（燃点 mark.heat）/ *斜体*（呢喃）
+ * 风味包：subtle 含蓄 / honey 蜜色(默认) / silk 流光 / blaze 燃情
+ * 强度：--spice-lv 0~1，控制透明度与光晕幅度
+ */
+
+/* ---- 蜜色：加粗锚点 → 暖肤色 + 微光晕 ---- */
+.spice-honey .reader-content strong,
+.spice-blaze .reader-content strong {
+  color: var(--spice-anchor, #c25e2e);
+  font-weight: 700;
+  text-shadow: 0 0 calc(10px * var(--spice-lv, 1))
+    color-mix(in srgb, var(--spice-anchor, #c25e2e) 28%, transparent);
+  transition: color 0.25s ease;
+}
+
+/* ---- 呢喃：斜体 → 淡色虚化气音 ---- */
+.spice-honey .reader-content em:not(.thought em),
+.spice-silk .reader-content em:not(.thought em),
+.spice-blaze .reader-content em:not(.thought em) {
+  color: color-mix(in srgb, currentColor 68%, transparent);
+  font-size: 0.95em;
+  letter-spacing: 0.02em;
+  filter: blur(0.2px);
+}
+
+/* ---- 潮红：燃点高亮 → 皮肤上洇开的红 ---- */
+.spice-honey .reader-content mark.heat,
+.spice-silk .reader-content mark.heat,
+.spice-blaze .reader-content mark.heat {
+  color: var(--spice-heat-fg, #a03050);
+  background: color-mix(in srgb, var(--spice-heat-bg, #e888a0) 22%, transparent);
+  border-radius: 0.4em;
+  padding: 0.05em 0.3em;
+  box-shadow: 0 0 calc(12px * var(--spice-lv, 1))
+    color-mix(in srgb, var(--spice-heat-bg, #e888a0) 35%, transparent);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+/* ---- 含蓄：只变色，无任何光效 ---- */
+.spice-subtle .reader-content strong {
+  color: var(--spice-anchor, #b3541e);
+  font-weight: 700;
+}
+.spice-subtle .reader-content mark.heat {
+  color: var(--spice-heat-fg, #a03050);
+  background: color-mix(in srgb, var(--spice-heat-bg, #e888a0) 12%, transparent);
+  border-radius: 0.4em;
+  padding: 0.05em 0.3em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.spice-subtle .reader-content em:not(.thought em) {
+  color: color-mix(in srgb, currentColor 75%, transparent);
+}
+
+/* ---- 流光（实验性）：锚点 → 丝绸滑动光泽 ---- */
+.spice-silk .reader-content strong {
+  background: linear-gradient(
+    110deg,
+    color-mix(in srgb, var(--spice-anchor, #c25e2e) 85%, #f4d58d) 0%,
+    #f0c280 28%,
+    color-mix(in srgb, var(--spice-anchor, #c25e2e) 90%, #fff) 50%,
+    #f0c280 72%,
+    color-mix(in srgb, var(--spice-anchor, #c25e2e) 85%, #f4d58d) 100%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
+  animation: spiceSilk calc(9s / max(var(--spice-lv, 1), 0.25)) linear infinite;
+}
+@keyframes spiceSilk {
+  from { background-position: 0% 0; }
+  to { background-position: -220% 0; }
+}
+
+/* ---- 呼吸（实验性）：燃点 → 体温律动 ---- */
+.spice-pulse .reader-content mark.heat {
+  animation: spicePulse calc(3.2s / max(var(--spice-lv, 1), 0.4)) ease-in-out infinite;
+}
+@keyframes spicePulse {
+  0%, 100% {
+    box-shadow: 0 0 calc(6px * var(--spice-lv, 1))
+      color-mix(in srgb, var(--spice-heat-bg, #e888a0) 20%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 calc(18px * var(--spice-lv, 1))
+      color-mix(in srgb, var(--spice-heat-bg, #e888a0) 55%, transparent);
+  }
+}
+
+/* ---- 燃情：加粗蜜色 + 呼吸默认开 ---- */
+
+/* ---- 暗色主题适配 ---- */
+.theme-dark-scope .reader-content strong,
+[data-spice-dark] .reader-content strong {
+  --spice-anchor: #e8956a;
+}
+
+/* 减少动效偏好：全部退化为静态 */
+@media (prefers-reduced-motion: reduce) {
+  .spice-silk .reader-content strong { animation: none; }
+  .spice-pulse .reader-content mark.heat { animation: none; }
+}
+
+/* ═══════════ ═══════════ */
+
 /* ===== 对话高亮 ===== */
 .dlg {
   color: var(--dlg-color, inherit);

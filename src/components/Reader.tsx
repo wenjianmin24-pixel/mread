@@ -117,7 +117,12 @@ function sanitize(html: string) {
 
 function renderChapter(content: string, format: string): string {
   if (format === "md") {
-    return sanitize(marked.parse(content, { async: false, gfm: true, breaks: false }) as string);
+    // 三级标记体系：==燃点== 预处理为 <mark class="heat">
+    // （在转义后、marked 解析前替换，行内安全）
+    const pre = content.replace(/==([^=\n]{1,120}?)==/g, '<mark class="heat">$1</mark>');
+    return sanitize(
+      marked.parse(pre, { async: false, gfm: true, breaks: false }) as string
+    );
   }
   return content
     .split(/\n+/)
@@ -573,8 +578,17 @@ export default function Reader({ bookId }: { bookId: number }) {
 
   return (
     <div
-      className={`h-dvh w-full overflow-hidden ${theme.id === "boxmocha" ? "theme-boxmocha" : ""}`}
-      style={{ background: bg, color: fg, ...dlgVars }}
+      className={`h-dvh w-full overflow-hidden ${
+        theme.id === "boxmocha" ? "theme-boxmocha" : ""
+      } spice-${settings.spiceStyle}${settings.spicePulse ? " spice-pulse" : ""}${
+        theme.dark ? " theme-dark-scope" : ""
+      }`}
+      style={{
+        background: bg,
+        color: fg,
+        ["--spice-lv" as string]: Math.max(0.1, settings.spiceIntensity / 100),
+        ...dlgVars,
+      }}
     >
       {/* ===== 内容区 ===== */}
       {settings.pageMode === "scroll" ? (
