@@ -28,6 +28,15 @@ export interface ReaderSettings {
   spiceStyle: "subtle" | "honey" | "silk" | "blaze"; // 风味包
   spiceIntensity: number; // 效果强度 0~100
   spicePulse: boolean; // 实验性：呼吸动效
+  aiConfig: AIConfig; // AI 优化配置
+}
+
+/** AI 优化配置 */
+export interface AIConfig {
+  apiUrl: string; // OpenAI 兼容 API 地址
+  apiKey: string;
+  model: string;
+  prompt: string; // 系统提示词
 }
 
 export const DEFAULT_SETTINGS: ReaderSettings = {
@@ -59,6 +68,21 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   spiceStyle: "honey",
   spiceIntensity: 70,
   spicePulse: false,
+  aiConfig: {
+    apiUrl: "",
+    apiKey: "",
+    model: "",
+    prompt: `你是小说文本格式标注器。对给定正文进行三级标记强化，严格不改动任何正文文字，只添加标记符号。
+
+**锚点**（加粗）：材质+颜色+部位组合词，如「翠绿色头发」「洁白羽翼」「蓝色丝质面罩」「金色玫瑰花」。每段不超过 4 处。
+==燃点==（高亮）：最具感官冲击力的词句、关键动作、敏感部位描写。仅用于最强烈的句子，控制用量。
+*呢喃*（斜体）：叙述者的感受、评价、心理活动整句，如「看起来非常舒适柔软」「令人遗憾的是」。
+
+规则：
+- 保持段落结构不变，不拆段不合并
+- 不改正文任何一个字，只添加标记
+- 直接输出纯 Markdown，不要解释，不要用代码块包裹`,
+  },
 };
 
 export interface ThemePreset {

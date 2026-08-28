@@ -14,6 +14,9 @@ import {
   Pause,
   Play,
   Type as TypeIcon,
+  Wand2,
+  X,
+  Check,
 } from "lucide-react";
 import { highlightDialogue } from "@/lib/dialogue";
 import {
@@ -149,6 +152,12 @@ export default function Reader({ bookId }: { bookId: number }) {
   const [markedBook, setMarkedBook] = useState(false);
   const [autoScrollOn, setAutoScrollOn] = useState(false);
   const [systemDark, setSystemDark] = useState(false);
+
+  // AI 强化
+  const [optimizing, setOptimizing] = useState(false);
+  const [optimizePreview, setOptimizePreview] = useState<string | null>(null);
+  const [optimizeError, setOptimizeError] = useState("");
+  const [applying, setApplying] = useState(false);
 
   const contentRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null); // paged 模式滚动容器
@@ -519,6 +528,49 @@ export default function Reader({ bookId }: { bookId: number }) {
     else setUiVisible((v) => !v);
   };
 
+  /* ---------- AI 强化 ---------- */
+  async function startOptimize() {
+    if (currentId == null) return;
+    setOptimizeError("");
+    setOptimizing(true);
+    try {
+      const res = await fetch("/api/optimize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chapterId: currentId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setOptimizeError(data.error || "强化失败");
+        return;
+      }
+      setOptimizePreview(data.enhanced);
+    } catch {
+      setOptimizeError("请求异常，请检查网络和 API 配置");
+    } finally {
+      setOptimizing(false);
+    }
+  }
+
+  async function applyOptimize() {
+    if (currentId == null || !optimizePreview) return;
+    setApplying(true);
+    try {
+      await fetch(`/api/chapters/${currentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: optimizePreview }),
+      });
+      // 重新渲染本章
+      setHtml(renderChapter(optimizePreview, book?.format ?? "txt"));
+      setOptimizePreview(null);
+    } catch {
+      setOptimizeError("应用失败，请重试");
+    } finally {
+      setApplying(false);
+    }
+  }
+
   /* ---------- 书签 ---------- */
   async function toggleBookmark() {
     if (currentId == null) return;
@@ -834,6 +886,99 @@ export default function Reader({ bookId }: { bookId: number }) {
               </button>
             </div>
             <ReaderSettingsPanel settings={settings} onChange={setSettings} />
+
+            {/* AI 强化按钮 */}
+            {currentId != null && (
+              <div className="px-5 pb-2 pt-1">
+                <button
+                  onClick={startOptimize}
+                  disabled={optimizing}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-black/8 bg-black/[0.03] py-3 text-sm transition active:scale-95 disabled:opacity-50"
+                  style={{ color: fg }}
+                >
+                  {optimizing ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <Wand2 size={15} />
+                  )}
+                  AI 强化本章
+                </button>
+                {optimizeError && (
+                  <p className="mt-1.5 text-center text-[10px] text-red-500">
+                    {optimizeError}
+                  </p>
+                )}
+                {optimizing && (
+                  <p className="mt-1.5 text-center text-[10px] opacity-50">
+                    正在调用 AI 标注，请稍候…
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* AI 强化预览 */}
+      {optimizePreview && (
+        <div
+          className="anim-fade-in fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => !applying && setOptimizePreview(null)}
+        >
+          <div
+            className="anim-sheet flex max-h-[85dvh] w-full max-w-3xl flex-col rounded-t-3xl"
+            style={{ background: ui, color: fg, paddingBottom: "env(safe-area-inset-bottom)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 pb-2 pt-4">
+              <h3 className="flex items-center gap-2 text-sm font-bold">
+                <Wand2 size={15} />
+                AI 强化预览
+              </h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setOptimizePreview(null)}
+                  disabled={applying}
+                  className="rounded-full px-3 py-1 text-xs transition active:scale-95"
+                  style={{ background: "rgba(0,0,0,0.08)" }}
+                >
+                  取消
+                </button>
+                <button
+                  onClick={applyOptimize}
+                  disabled={applying}
+                  className="flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold shadow-lg transition active:scale-95 disabled:opacity-50"
+                  style={{ background: fg, color: ui }}
+                >
+                  {applying ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                  应用到本章
+                </button>
+              </div>
+            </div>
+            <div className="mx-auto w-full flex-1 overflow-y-auto px-5 pb-8 no-scrollbar">
+              <div
+                className={`reader-content rounded-xl p-4 text-sm leading-relaxed spice-${settings.spiceStyle}${settings.spicePulse ? " spice-pulse" : ""}`}
+                style={{
+                  background: "rgba(0,0,0,0.04)",
+                  fontFamily,
+                  fontSize: settings.fontSize,
+                  lineHeight: settings.lineHeight,
+                  ["--spice-lv" as string]: Math.max(0.1, settings.spiceIntensity / 100),
+                }}
+                ref={(el) => {
+                  if (el && optimizePreview) {
+                    el.innerHTML = renderChapter(optimizePreview, book?.format ?? "md");
+                    if (settings.dialogueEnabled) {
+                      highlightDialogue(el, {
+                        rainbow: settings.dialogueRainbow,
+                        bold: settings.dialogueBold,
+                        mood: settings.moodStyling,
+                      });
+                    }
+                  }
+                }}
+              />
+            </div>
           </div>
         </div>
       )}

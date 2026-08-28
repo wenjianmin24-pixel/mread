@@ -15,8 +15,9 @@ import {
   MousePointerClick,
   Info,
   LibraryBig,
+  Wand2,
 } from "lucide-react";
-import { DEFAULT_SETTINGS, FONT_STACKS, type ReaderSettings } from "@/lib/types";
+import { DEFAULT_SETTINGS, FONT_STACKS, type AIConfig, type ReaderSettings } from "@/lib/types";
 
 interface FontMeta {
   id: number;
@@ -57,6 +58,24 @@ export default function SettingsPage({ initialFonts }: { initialFonts: FontMeta[
         body: JSON.stringify(next),
       }).catch(() => {});
     }, 500);
+  }
+
+  function setAIField<K extends keyof AIConfig>(key: K, value: AIConfig[K]) {
+    const next = { ...shelfSettings, aiConfig: { ...shelfSettings.aiConfig, [key]: value } };
+    setShelfSettings(next);
+    if (saveShelfTimer.current) clearTimeout(saveShelfTimer.current);
+    saveShelfTimer.current = setTimeout(() => {
+      fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(next),
+      }).catch(() => {});
+    }, 800);
+  }
+
+  function resetAIPrompt() {
+    setAIField("prompt", DEFAULT_SETTINGS.aiConfig.prompt);
+    showToast("已恢复默认提示词");
   }
 
   // 封面书名跟随正文字体
@@ -274,6 +293,72 @@ export default function SettingsPage({ initialFonts }: { initialFonts: FontMeta[
               <p className="mt-0.5 text-[11px] leading-relaxed text-zinc-500">{c.d}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* AI 优化配置 */}
+      <section className="anim-fade-up mt-10" style={{ animationDelay: "0.2s" }}>
+        <h2 className="flex items-center gap-2 text-sm font-semibold tracking-wide text-zinc-300">
+          <Wand2 size={15} className="text-amber-400" />
+          AI 优化配置
+        </h2>
+        <p className="mt-1.5 text-xs text-zinc-600">
+          接入 OpenAI 兼容 API，按提示词自动给章节加三级标记（锚点/燃点/呢喃）
+        </p>
+
+        <div className="mt-4 space-y-3 rounded-2xl border border-white/8 bg-white/[0.04] p-4">
+          <label className="block">
+            <span className="mb-1 block text-[11px] text-zinc-500">API 地址</span>
+            <input
+              value={shelfSettings.aiConfig.apiUrl}
+              onChange={(e) => setAIField("apiUrl", e.target.value)}
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-amber-500/50"
+              placeholder="https://api.openai.com/v1/chat/completions"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[11px] text-zinc-500">API Key</span>
+            <input
+              type="password"
+              value={shelfSettings.aiConfig.apiKey}
+              onChange={(e) => setAIField("apiKey", e.target.value)}
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-amber-500/50"
+              placeholder="sk-..."
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[11px] text-zinc-500">模型名</span>
+            <input
+              value={shelfSettings.aiConfig.model}
+              onChange={(e) => setAIField("model", e.target.value)}
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-amber-500/50"
+              placeholder="gpt-4o-mini / deepseek-chat / ..."
+            />
+          </label>
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-[11px] text-zinc-500">系统提示词</span>
+              <button
+                onClick={resetAIPrompt}
+                className="text-[10px] text-amber-400/70 transition active:scale-95"
+              >
+                恢复默认
+              </button>
+            </div>
+            <textarea
+              value={shelfSettings.aiConfig.prompt}
+              onChange={(e) => setAIField("prompt", e.target.value)}
+              rows={10}
+              className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-3.5 py-3 text-xs leading-relaxed text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-amber-500/50"
+            />
+          </div>
+        </div>
+        <div className="mt-3 flex items-start gap-2 rounded-2xl bg-amber-500/5 p-4 text-[11px] leading-relaxed text-zinc-500">
+          <Info size={14} className="mt-0.5 shrink-0 text-amber-400/70" />
+          <p>
+            配置保存后，在阅读器中打开任意章节 → 阅读设置 → 底部「AI 强化本章」即可自动标注。
+            API Key 存储在本应用数据库中，仅在服务端调用时使用，不会暴露到前端。
+          </p>
         </div>
       </section>
 
