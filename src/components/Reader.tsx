@@ -204,6 +204,7 @@ export default function Reader({ bookId }: { bookId: number }) {
   const currentIdRef = useRef<number | null>(null);
   const pagedRef = useRef(false);
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
 
   currentIdRef.current = currentId;
   pagedRef.current = settings.pageMode === "paged";
@@ -370,6 +371,21 @@ export default function Reader({ bookId }: { bookId: number }) {
       if (settingsTimer.current) clearTimeout(settingsTimer.current);
     };
   }, [settings, loading]);
+
+  /* ---------- AI 预览内容渲染（流式期间随 optimizePreview 反复刷新） ---------- */
+  useEffect(() => {
+    const el = previewRef.current;
+    if (!el || optimizePreview == null) return;
+    el.innerHTML = renderChapter(optimizePreview, "md");
+    if (settings.dialogueEnabled) {
+      highlightDialogue(el, {
+        rainbow: settings.dialogueRainbow,
+        bold: settings.dialogueBold,
+        mood: settings.moodStyling,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [optimizePreview, settings.dialogueEnabled, settings.dialogueRainbow, settings.dialogueBold, settings.moodStyling]);
 
   /* ---------- 屏幕常亮 ---------- */
   useEffect(() => {
@@ -562,26 +578,46 @@ export default function Reader({ bookId }: { bookId: number }) {
     else setUiVisible((v) => !v);
   };
 
-  /* ---------- AI 强化 / 去除八股 ---------- */
+  /* ---------- AI 强化 / 去除八股（流式，实时填充预览） ---------- */
   async function startOptimize(mode: "enhance" | "cleanup") {
     if (currentId == null) return;
     setOptimizeMode(mode);
     setOptimizeError("");
     setOptimizing(true);
+    setOptimizePreview(""); // 立即打开预览窗，随流式返回逐步填充
     try {
       const res = await fetch("/api/optimize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chapterId: currentId, mode }),
+        body: JSON.stringify({ chapterId: currentId, mode, stream: true }),
       });
-      const data = await res.json();
       if (!res.ok) {
-        setOptimizeError(data.error || "强化失败");
+        const d = await res.json().catch(() => ({}));
+        setOptimizeError(d.error || "请求失败");
+        setOptimizePreview(null);
         return;
       }
-      setOptimizePreview(data.enhanced);
+      const reader = res.body?.getReader();
+      if (!reader) {
+        setOptimizeError("当前环境不支持流式读取");
+        setOptimizePreview(null);
+        return;
+      }
+      const dec = new TextDecoder();
+      let text = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        text += dec.decode(value, { stream: true });
+        setOptimizePreview(text);
+      }
+      if (!text.trim()) {
+        setOptimizeError("AI 返回为空");
+        setOptimizePreview(null);
+      }
     } catch {
       setOptimizeError("请求异常，请检查网络和 API 配置");
+      setOptimizePreview(null);
     } finally {
       setOptimizing(false);
     }
@@ -1005,6 +1041,7 @@ export default function Reader({ bookId }: { bookId: number }) {
             </div>
             <div className="mx-auto w-full flex-1 overflow-y-auto px-5 pb-8 no-scrollbar">
               <div
+                ref={previewRef}
                 className={`reader-content rounded-xl p-4 text-sm leading-relaxed spice-${settings.spiceStyle}${settings.spicePulse ? " spice-pulse" : ""}`}
                 style={{
                   background: "rgba(0,0,0,0.04)",
@@ -1012,18 +1049,6 @@ export default function Reader({ bookId }: { bookId: number }) {
                   fontSize: settings.fontSize,
                   lineHeight: settings.lineHeight,
                   ["--spice-lv" as string]: Math.max(0.1, settings.spiceIntensity / 100),
-                }}
-                ref={(el) => {
-                  if (el && optimizePreview) {
-                    el.innerHTML = renderChapter(optimizePreview, book?.format ?? "md");
-                    if (settings.dialogueEnabled) {
-                      highlightDialogue(el, {
-                        rainbow: settings.dialogueRainbow,
-                        bold: settings.dialogueBold,
-                        mood: settings.moodStyling,
-                      });
-                    }
-                  }
                 }}
               />
             </div>

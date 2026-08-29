@@ -16,6 +16,8 @@ import {
   Info,
   LibraryBig,
   Wand2,
+  PlugZap,
+  ListRestart,
 } from "lucide-react";
 import { DEFAULT_SETTINGS, FONT_STACKS, type AIConfig, type ReaderSettings } from "@/lib/types";
 
@@ -86,6 +88,68 @@ export default function SettingsPage({ initialFonts }: { initialFonts: FontMeta[
   function resetAICleanupPrompt() {
     setAIField("cleanupPrompt", DEFAULT_SETTINGS.aiConfig.cleanupPrompt);
     showToast("已恢复默认净化提示词");
+  }
+
+  // AI 连通性测试 / 模型列表拉取
+  const [aiBusy, setAiBusy] = useState<"test" | "models" | null>(null);
+  const [aiMsg, setAiMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [modelList, setModelList] = useState<string[]>([]);
+
+  async function testAI() {
+    setAiBusy("test");
+    setAiMsg(null);
+    try {
+      const res = await fetch("/api/ai/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          apiUrl: shelfSettings.aiConfig.apiUrl,
+          apiKey: shelfSettings.aiConfig.apiKey,
+          model: shelfSettings.aiConfig.model,
+        }),
+      });
+      const d = await res.json();
+      setAiMsg(
+        d.ok
+          ? { ok: true, text: `连接正常 · ${d.latencyMs}ms · 模型回复：${d.reply || "（空）"}` }
+          : { ok: false, text: d.error || "测试失败" }
+      );
+    } catch {
+      setAiMsg({ ok: false, text: "测试请求异常" });
+    } finally {
+      setAiBusy(null);
+    }
+  }
+
+  async function fetchModels() {
+    setAiBusy("models");
+    setAiMsg(null);
+    try {
+      const res = await fetch("/api/ai/models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          apiUrl: shelfSettings.aiConfig.apiUrl,
+          apiKey: shelfSettings.aiConfig.apiKey,
+        }),
+      });
+      const d = await res.json();
+      if (d.ok) {
+        setModelList(d.models);
+        setAiMsg({
+          ok: true,
+          text: d.models.length
+            ? `拉取到 ${d.models.length} 个模型，点击「模型名」输入框可直接选择`
+            : "该 API 未返回任何模型",
+        });
+      } else {
+        setAiMsg({ ok: false, text: d.error || "拉取失败" });
+      }
+    } catch {
+      setAiMsg({ ok: false, text: "拉取请求异常" });
+    } finally {
+      setAiBusy(null);
+    }
   }
 
   // 封面书名跟随正文字体
@@ -341,10 +405,39 @@ export default function SettingsPage({ initialFonts }: { initialFonts: FontMeta[
             <input
               value={shelfSettings.aiConfig.model}
               onChange={(e) => setAIField("model", e.target.value)}
+              list="ai-model-list"
               className="w-full rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-amber-500/50"
               placeholder="gpt-4o-mini / deepseek-chat / ..."
             />
+            <datalist id="ai-model-list">
+              {modelList.map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
           </label>
+          <div className="flex gap-2">
+            <button
+              onClick={testAI}
+              disabled={aiBusy != null}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/5 py-2.5 text-xs font-medium text-zinc-200 transition hover:bg-white/10 active:scale-95 disabled:opacity-50"
+            >
+              {aiBusy === "test" ? <Loader2 size={13} className="animate-spin" /> : <PlugZap size={13} className="text-amber-400" />}
+              测试连接
+            </button>
+            <button
+              onClick={fetchModels}
+              disabled={aiBusy != null}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/5 py-2.5 text-xs font-medium text-zinc-200 transition hover:bg-white/10 active:scale-95 disabled:opacity-50"
+            >
+              {aiBusy === "models" ? <Loader2 size={13} className="animate-spin" /> : <ListRestart size={13} className="text-amber-400" />}
+              拉取模型列表
+            </button>
+          </div>
+          {aiMsg && (
+            <p className={`break-all text-[11px] leading-relaxed ${aiMsg.ok ? "text-emerald-400" : "text-red-400"}`}>
+              {aiMsg.text}
+            </p>
+          )}
           <div>
             <div className="mb-1 flex items-center justify-between">
               <span className="text-[11px] text-zinc-500">强化提示词（三级标记）</span>

@@ -48,7 +48,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 调用 LLM（OpenAI 兼容 /v1/chat/completions）
+    // 调用 LLM（OpenAI 兼容 /v1/chat/completions）；stream 模式转发文本增量供前端实时渲染
+    const wantsStream = body.stream === true;
     const llmResp = await fetch(cfg.apiUrl, {
       method: "POST",
       headers: {
@@ -63,6 +64,7 @@ export async function POST(req: NextRequest) {
         ],
         temperature: 0.3,
         max_tokens: 8192,
+        ...(wantsStream ? { stream: true } : {}),
       }),
     });
 
@@ -73,6 +75,62 @@ export async function POST(req: NextRequest) {
         { error: `AI 请求失败（${llmResp.status}）` },
         { status: 502 }
       );
+    }
+
+    if (wantsStream && llmResp.body) {
+      const upstream = llmResp.body;
+      const decoder = new TextDecoder();
+      const encoder = new TextEncoder();
+      let emitted = false;
+      const stream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          const reader = upstream.getReader();
+          let buf = "";
+          try {
+            for (;;) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buf += decoder.decode(value, { stream: true });
+              const lines = buf.split("\n");
+              buf = lines.pop() ?? "";
+              for (const line of lines) {
+                const t = line.trim();
+                if (!t.startsWith("data:")) continue;
+                const payload = t.slice(5).trim();
+                if (payload === "[DONE]") continue;
+                try {
+                  const delta =
+                    JSON.parse(payload).choices?.[0]?.delta?.content ?? "";
+                  if (delta) {
+                    emitted = true;
+                    controller.enqueue(encoder.encode(delta));
+                  }
+                } catch {
+                  /* 心跳等非 JSON 行，忽略 */
+                }
+              }
+            }
+            // 个别兼容端不支持 stream，返回了完整 JSON：兜底取出整段内容
+            if (!emitted) {
+              try {
+                const full = JSON.parse(buf).choices?.[0]?.message?.content ?? "";
+                if (full) controller.enqueue(encoder.encode(full));
+              } catch {
+                /* ignore */
+              }
+            }
+          } finally {
+            controller.close();
+            reader.releaseLock();
+          }
+        },
+      });
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-store",
+        },
+      });
     }
 
     const data = await llmResp.json();
