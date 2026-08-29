@@ -118,13 +118,45 @@ function sanitize(html: string) {
     .replace(/javascript:/gi, "");
 }
 
+/** 语义着色：从标注短语中识别颜色词，锚点/燃点呈现对应色彩（CSS 端按亮/暗主题各有一套色值） */
+const COLOR_FAMILIES: [RegExp, string][] = [
+  [/粉|桃色|樱/, "pink"],
+  [/橙|橘|琥珀/, "orange"],
+  [/金|鎏/, "gold"],
+  [/银/, "silver"],
+  [/翠绿|绿|翡翠/, "green"],
+  [/青|碧|薄荷/, "cyan"],
+  [/蓝|靛/, "blue"],
+  [/紫|藕色/, "purple"],
+  [/红|绯|茜|赤|朱/, "red"],
+  [/棕|褐|咖|茶色/, "brown"],
+  [/白|雪|霜/, "white"],
+  [/黑|墨|乌/, "black"],
+  [/灰/, "gray"],
+];
+
+function colorClassOf(text: string, prefix: string): string {
+  for (const [re, name] of COLOR_FAMILIES) {
+    if (re.test(text)) return ` ${prefix}-${name}`;
+  }
+  return "";
+}
+
 function renderChapter(content: string, format: string): string {
   if (format === "md") {
     // 三级标记体系：==燃点== 预处理为 <mark class="heat">
     // （在转义后、marked 解析前替换，行内安全）
-    const pre = content.replace(/==([^=\n]{1,120}?)==/g, '<mark class="heat">$1</mark>');
+    const pre = content.replace(
+      /==([^=\n]{1,120}?)==/g,
+      (_m, t: string) => `<mark class="heat${colorClassOf(t, "ht")}">${t}</mark>`
+    );
+    // marked 按 CommonMark 解析强调，但中文标点紧邻星号时会被判定不成对
+    // （如 *林晚愣住了。*这），产出字面星号。行内 ** 与 * 先行自行转换。
+    const inline = pre
+      .replace(/\*\*([^*\n]{1,300}?)\*\*/g, (_m, t: string) => `<strong class="anc${colorClassOf(t, "anc")}">${t}</strong>`)
+      .replace(/\*([^*\n]{1,300}?)\*/g, "<em>$1</em>");
     return sanitize(
-      marked.parse(pre, { async: false, gfm: true, breaks: false }) as string
+      marked.parse(inline, { async: false, gfm: true, breaks: false }) as string
     );
   }
   return content
