@@ -95,6 +95,15 @@ export default function SettingsPage({ initialFonts }: { initialFonts: FontMeta[
   const [aiMsg, setAiMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [modelList, setModelList] = useState<string[]>([]);
 
+  function isValidJSON(s: string): boolean {
+    try {
+      const v = JSON.parse(s);
+      return !!v && typeof v === "object" && !Array.isArray(v);
+    } catch {
+      return false;
+    }
+  }
+
   async function testAI() {
     setAiBusy("test");
     setAiMsg(null);
@@ -106,6 +115,7 @@ export default function SettingsPage({ initialFonts }: { initialFonts: FontMeta[
           apiUrl: shelfSettings.aiConfig.apiUrl,
           apiKey: shelfSettings.aiConfig.apiKey,
           model: shelfSettings.aiConfig.model,
+          extraBody: shelfSettings.aiConfig.extraBody,
         }),
       });
       const d = await res.json();
@@ -472,6 +482,27 @@ export default function SettingsPage({ initialFonts }: { initialFonts: FontMeta[
               className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-3.5 py-3 text-xs leading-relaxed text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-amber-500/50"
             />
           </div>
+          <label className="block">
+            <span className="mb-1 block text-[11px] text-zinc-500">
+              自定义请求 body 参数（JSON 对象，可选，可覆盖 temperature 等默认值）
+            </span>
+            <textarea
+              value={shelfSettings.aiConfig.extraBody}
+              onChange={(e) => setAIField("extraBody", e.target.value)}
+              rows={3}
+              placeholder='{"temperature": 0.7, "top_p": 0.9}'
+              className={`w-full resize-none rounded-xl border bg-white/5 px-3.5 py-3 font-mono text-xs leading-relaxed text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-amber-500/50 ${
+                shelfSettings.aiConfig.extraBody.trim() && !isValidJSON(shelfSettings.aiConfig.extraBody)
+                  ? "border-red-500/60"
+                  : "border-white/10"
+              }`}
+            />
+            {shelfSettings.aiConfig.extraBody.trim() && !isValidJSON(shelfSettings.aiConfig.extraBody) && (
+              <span className="mt-1 block text-[10px] text-red-400">
+                不是合法的 JSON 对象，AI 调用将被拒绝，请修正或清空
+              </span>
+            )}
+          </label>
         </div>
         <div className="mt-3 flex items-start gap-2 rounded-2xl bg-amber-500/5 p-4 text-[11px] leading-relaxed text-zinc-500">
           <Info size={14} className="mt-0.5 shrink-0 text-amber-400/70" />

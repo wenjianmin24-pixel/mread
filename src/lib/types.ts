@@ -38,6 +38,7 @@ export interface AIConfig {
   model: string;
   prompt: string; // 系统提示词：三级标记强化
   cleanupPrompt: string; // 系统提示词：去除 AI 八股
+  extraBody: string; // 自定义请求 body 参数（JSON 对象字符串，可选）
 }
 
 export const DEFAULT_SETTINGS: ReaderSettings = {
@@ -131,6 +132,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
 - 保持段落结构与分段不变，不拆段不合并
 - 只输出净化后的正文，不添加任何标记符号（不加 ** == *）
 - 直接输出纯 Markdown，不要解释，不要用代码块包裹`,
+    extraBody: "",
   },
 };
 

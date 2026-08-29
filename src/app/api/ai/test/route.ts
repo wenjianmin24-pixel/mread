@@ -7,12 +7,25 @@ import { NextRequest, NextResponse } from "next/server";
  */
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
-  const { apiUrl, apiKey, model } = body ?? {};
+  const { apiUrl, apiKey, model, extraBody } = body ?? {};
   if (!apiUrl || !apiKey || !model) {
     return NextResponse.json(
       { ok: false, error: "请先填写 API 地址、Key 和模型名" },
       { status: 400 }
     );
+  }
+  let extra: Record<string, unknown> = {};
+  if (typeof extraBody === "string" && extraBody.trim()) {
+    try {
+      const parsed = JSON.parse(extraBody);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
+      extra = parsed;
+    } catch {
+      return NextResponse.json(
+        { ok: false, error: "自定义请求参数不是合法的 JSON 对象" },
+        { status: 400 }
+      );
+    }
   }
   let origin = "";
   try {
@@ -32,10 +45,11 @@ export async function POST(req: NextRequest) {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model,
-        messages: [{ role: "user", content: '只回复两个字：正常' }],
         max_tokens: 16,
         temperature: 0,
+        ...extra,
+        model,
+        messages: [{ role: "user", content: '只回复两个字：正常' }],
       }),
       signal: AbortSignal.timeout(30000),
     });

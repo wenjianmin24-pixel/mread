@@ -48,6 +48,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 自定义 body 参数（JSON 对象，可选）：可覆盖 temperature 等默认值，
+    // 但 model / messages / stream / max_tokens 基座不可被破坏
+    let extra: Record<string, unknown> = {};
+    const rawExtra = (cfg as { extraBody?: string }).extraBody?.trim();
+    if (rawExtra) {
+      try {
+        const parsed = JSON.parse(rawExtra);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          throw new Error("not an object");
+        }
+        extra = parsed;
+      } catch {
+        return NextResponse.json(
+          { error: "自定义请求参数不是合法的 JSON 对象，请在设置中修正" },
+          { status: 400 }
+        );
+      }
+    }
+
     // 调用 LLM（OpenAI 兼容 /v1/chat/completions）；stream 模式转发文本增量供前端实时渲染
     const wantsStream = body.stream === true;
     const llmResp = await fetch(cfg.apiUrl, {
@@ -57,13 +76,14 @@ export async function POST(req: NextRequest) {
         Authorization: `Bearer ${cfg.apiKey}`,
       },
       body: JSON.stringify({
+        temperature: 0.3,
+        max_tokens: 8192,
+        ...extra,
         model: cfg.model,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: ch.content },
         ],
-        temperature: 0.3,
-        max_tokens: 8192,
         ...(wantsStream ? { stream: true } : {}),
       }),
     });
