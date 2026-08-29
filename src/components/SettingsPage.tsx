@@ -42,7 +42,12 @@ export default function SettingsPage({ initialFonts }: { initialFonts: FontMeta[
     fetch("/api/settings")
       .then((r) => r.json())
       .then((d) => {
-        if (d.settings) setShelfSettings(d.settings);
+        if (d.settings)
+          setShelfSettings({
+            ...DEFAULT_SETTINGS,
+            ...d.settings,
+            aiConfig: { ...DEFAULT_SETTINGS.aiConfig, ...d.settings.aiConfig },
+          });
       })
       .finally(() => setShelfLoaded(true));
   }, []);
@@ -76,6 +81,11 @@ export default function SettingsPage({ initialFonts }: { initialFonts: FontMeta[
   function resetAIPrompt() {
     setAIField("prompt", DEFAULT_SETTINGS.aiConfig.prompt);
     showToast("已恢复默认提示词");
+  }
+
+  function resetAICleanupPrompt() {
+    setAIField("cleanupPrompt", DEFAULT_SETTINGS.aiConfig.cleanupPrompt);
+    showToast("已恢复默认净化提示词");
   }
 
   // 封面书名跟随正文字体
@@ -303,7 +313,7 @@ export default function SettingsPage({ initialFonts }: { initialFonts: FontMeta[
           AI 优化配置
         </h2>
         <p className="mt-1.5 text-xs text-zinc-600">
-          接入 OpenAI 兼容 API，按提示词自动给章节加三级标记（锚点/燃点/呢喃）
+          接入 OpenAI 兼容 API：按提示词给章节加三级标记（锚点/燃点/呢喃），或按净化提示词去除正文中的 AI 八股腔
         </p>
 
         <div className="mt-4 space-y-3 rounded-2xl border border-white/8 bg-white/[0.04] p-4">
@@ -337,7 +347,7 @@ export default function SettingsPage({ initialFonts }: { initialFonts: FontMeta[
           </label>
           <div>
             <div className="mb-1 flex items-center justify-between">
-              <span className="text-[11px] text-zinc-500">系统提示词</span>
+              <span className="text-[11px] text-zinc-500">强化提示词（三级标记）</span>
               <button
                 onClick={resetAIPrompt}
                 className="text-[10px] text-amber-400/70 transition active:scale-95"
@@ -352,11 +362,28 @@ export default function SettingsPage({ initialFonts }: { initialFonts: FontMeta[
               className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-3.5 py-3 text-xs leading-relaxed text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-amber-500/50"
             />
           </div>
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-[11px] text-zinc-500">净化提示词（去除 AI 八股）</span>
+              <button
+                onClick={resetAICleanupPrompt}
+                className="text-[10px] text-amber-400/70 transition active:scale-95"
+              >
+                恢复默认
+              </button>
+            </div>
+            <textarea
+              value={shelfSettings.aiConfig.cleanupPrompt}
+              onChange={(e) => setAIField("cleanupPrompt", e.target.value)}
+              rows={10}
+              className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-3.5 py-3 text-xs leading-relaxed text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-amber-500/50"
+            />
+          </div>
         </div>
         <div className="mt-3 flex items-start gap-2 rounded-2xl bg-amber-500/5 p-4 text-[11px] leading-relaxed text-zinc-500">
           <Info size={14} className="mt-0.5 shrink-0 text-amber-400/70" />
           <p>
-            配置保存后，在阅读器中打开任意章节 → 阅读设置 → 底部「AI 强化本章」即可自动标注。
+            配置保存后，在阅读器中打开任意章节 → 阅读设置 → 底部「AI 强化本章」「去除 AI 八股」即可使用。
             API Key 存储在本应用数据库中，仅在服务端调用时使用，不会暴露到前端。
           </p>
         </div>

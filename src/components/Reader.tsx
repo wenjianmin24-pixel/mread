@@ -15,6 +15,7 @@ import {
   Play,
   Type as TypeIcon,
   Wand2,
+  Eraser,
   X,
   Check,
 } from "lucide-react";
@@ -185,8 +186,9 @@ export default function Reader({ bookId }: { bookId: number }) {
   const [autoScrollOn, setAutoScrollOn] = useState(false);
   const [systemDark, setSystemDark] = useState(false);
 
-  // AI 强化
+  // AI 强化 / 净化
   const [optimizing, setOptimizing] = useState(false);
+  const [optimizeMode, setOptimizeMode] = useState<"enhance" | "cleanup">("enhance");
   const [optimizePreview, setOptimizePreview] = useState<string | null>(null);
   const [optimizeError, setOptimizeError] = useState("");
   const [applying, setApplying] = useState(false);
@@ -560,16 +562,17 @@ export default function Reader({ bookId }: { bookId: number }) {
     else setUiVisible((v) => !v);
   };
 
-  /* ---------- AI 强化 ---------- */
-  async function startOptimize() {
+  /* ---------- AI 强化 / 去除八股 ---------- */
+  async function startOptimize(mode: "enhance" | "cleanup") {
     if (currentId == null) return;
+    setOptimizeMode(mode);
     setOptimizeError("");
     setOptimizing(true);
     try {
       const res = await fetch("/api/optimize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chapterId: currentId }),
+        body: JSON.stringify({ chapterId: currentId, mode }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -919,30 +922,43 @@ export default function Reader({ bookId }: { bookId: number }) {
             </div>
             <ReaderSettingsPanel settings={settings} onChange={setSettings} />
 
-            {/* AI 强化按钮 */}
+            {/* AI 按钮：强化 / 净化并列 */}
             {currentId != null && (
-              <div className="px-5 pb-2 pt-1">
+              <div className="flex gap-2 px-5 pb-2 pt-1">
                 <button
-                  onClick={startOptimize}
+                  onClick={() => startOptimize("enhance")}
                   disabled={optimizing}
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-black/8 bg-black/[0.03] py-3 text-sm transition active:scale-95 disabled:opacity-50"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-black/8 bg-black/[0.03] py-3 text-sm transition active:scale-95 disabled:opacity-50"
                   style={{ color: fg }}
                 >
-                  {optimizing ? (
+                  {optimizing && optimizeMode === "enhance" ? (
                     <Loader2 size={15} className="animate-spin" />
                   ) : (
                     <Wand2 size={15} />
                   )}
                   AI 强化本章
                 </button>
+                <button
+                  onClick={() => startOptimize("cleanup")}
+                  disabled={optimizing}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-black/8 bg-black/[0.03] py-3 text-sm transition active:scale-95 disabled:opacity-50"
+                  style={{ color: fg }}
+                >
+                  {optimizing && optimizeMode === "cleanup" ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <Eraser size={15} />
+                  )}
+                  去除 AI 八股
+                </button>
                 {optimizeError && (
-                  <p className="mt-1.5 text-center text-[10px] text-red-500">
+                  <p className="mt-1.5 w-full text-center text-[10px] text-red-500">
                     {optimizeError}
                   </p>
                 )}
                 {optimizing && (
-                  <p className="mt-1.5 text-center text-[10px] opacity-50">
-                    正在调用 AI 标注，请稍候…
+                  <p className="mt-1.5 w-full text-center text-[10px] opacity-50">
+                    正在调用 AI，请稍候…
                   </p>
                 )}
               </div>
@@ -964,8 +980,8 @@ export default function Reader({ bookId }: { bookId: number }) {
           >
             <div className="flex items-center justify-between px-5 pb-2 pt-4">
               <h3 className="flex items-center gap-2 text-sm font-bold">
-                <Wand2 size={15} />
-                AI 强化预览
+                {optimizeMode === "cleanup" ? <Eraser size={15} /> : <Wand2 size={15} />}
+                {optimizeMode === "cleanup" ? "净化预览 · 去除 AI 八股" : "AI 强化预览"}
               </h3>
               <div className="flex items-center gap-2">
                 <button

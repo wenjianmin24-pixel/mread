@@ -5,8 +5,8 @@ import { eq } from "drizzle-orm";
 import { DEFAULT_SETTINGS } from "@/lib/types";
 
 /**
- * POST /api/optimize —— AI 格式强化（OpenAI 兼容）
- * body: { chapterId: number }
+ * POST /api/optimize —— AI 格式强化 / 去除 AI 八股（OpenAI 兼容）
+ * body: { chapterId: number, mode?: "enhance" | "cleanup" }
  * 返回: { original, enhanced }
  */
 export async function POST(req: NextRequest) {
@@ -15,6 +15,8 @@ export async function POST(req: NextRequest) {
     if (!body || !Number.isInteger(body.chapterId)) {
       return NextResponse.json({ error: "缺少 chapterId" }, { status: 400 });
     }
+    const mode: "enhance" | "cleanup" =
+      body.mode === "cleanup" ? "cleanup" : "enhance";
 
     const [ch] = await db
       .select()
@@ -24,7 +26,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "章节不存在" }, { status: 404 });
     }
 
-    // 取 AI 配置
+    // 取 AI 配置（旧存档可能缺少 cleanupPrompt，回落到默认值）
     const [s] = await db.select().from(settings).limit(1);
     const cfg = ((s?.data as Record<string, unknown>)?.aiConfig ??
       DEFAULT_SETTINGS.aiConfig) as {
@@ -32,7 +34,12 @@ export async function POST(req: NextRequest) {
       apiKey: string;
       model: string;
       prompt: string;
+      cleanupPrompt?: string;
     };
+    const systemPrompt =
+      mode === "cleanup"
+        ? cfg.cleanupPrompt || DEFAULT_SETTINGS.aiConfig.cleanupPrompt
+        : cfg.prompt;
 
     if (!cfg.apiUrl || !cfg.apiKey || !cfg.model) {
       return NextResponse.json(
@@ -51,7 +58,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         model: cfg.model,
         messages: [
-          { role: "system", content: cfg.prompt },
+          { role: "system", content: systemPrompt },
           { role: "user", content: ch.content },
         ],
         temperature: 0.3,
